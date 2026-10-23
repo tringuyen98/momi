@@ -131,7 +131,7 @@ The welcome screen is implemented in native SwiftUI with vector shapes/SF Symbol
 
 After a successful save, a soft circular reveal grows from near the start button, shows a short personalized greeting, then fades into Home while Home settles into place. The normal sequence is about two seconds. Reduce Motion uses a short static greeting and fade, without scaling, floating or blur. Saving failure leaves the editable welcome screen in place; repeated taps are blocked. Backgrounding during the transition finishes the entrance, so returning to the app cannot leave a blocking overlay.
 
-Existing users can choose **Cài đặt → Xem lại màn chào Momi** to preview both the layout and transition without changing their saved profile or records. No deletion/reinstallation is needed. The preview's Close button exits without starting the animation.
+The welcome-screen preview shortcut has been removed from Settings. Existing profiles open Home normally; the onboarding transition remains for first-time setup.
 
 The iPhone build succeeds. No simulator runtime is installed, so visual/timing verification on-device remains pending. Check the new screen on the intended iPhone, with the keyboard, both stage/date options, large accessibility text and Reduce Motion. Also test rapid repeated Start taps and background/foreground during the entrance.
 
@@ -144,3 +144,8 @@ On iPhone, add a product with a user-entered quantity/unit and three distinct da
 ### Deleting a supplement
 
 Swipe left on a row in **Vitamin & bổ sung → Tất cả sản phẩm** to reveal Delete, or open the product/detail editor and choose **Xóa sản phẩm**. Both paths ask for confirmation; a full swipe does not delete automatically. Successful deletion removes the product and its snoozes, refreshes pending notifications and cleans up unshared attachments. Self-contained intake history remains visible in the existing history screen. Verify swipe, cancel, confirmed deletion and back navigation on iPhone.
+
+
+### Simplified Settings
+
+Settings contains only the profile name, stage, preparation-cycle link, notification status/action and device-authentication app lock. Welcome preview, sensitive-notification toggle, backup/restore, exports, data counts and erase-all controls are removed from this UI. Existing records and notification privacy preferences are preserved. Backup/export core services remain in code but have no Settings entry point. Verify rename, stage/cycle navigation, notification permission/return from iPhone Settings, and app-lock cancellation on device.
