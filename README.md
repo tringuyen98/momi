@@ -92,12 +92,13 @@ The content library is a small initial set, with source links and no claim of cl
 
 ## Validation on the implementation machine
 
-- Full Xcode and iOS SDK are not installed; active developer directory is Command Line Tools.
-- Core builds and command-line domain assertions are run using the installed Swift compiler.
-- Swift Testing sources are provided, but `swift test` cannot run here because the `Testing` module is absent from the installed CLT.
-- App plist/project syntax and iOS-target source parsing are checked.
-- Shared SwiftUI/services can be typechecked against the macOS SDK using a temporary persistence-interface stub. This does **not** validate SwiftData macros, the iOS-only code paths, an iOS link, simulator launch, or actual UI behavior.
-- The full SwiftData/app build is blocked by the missing Xcode SwiftData macro plugin/iOS SDK. No successful iPhone build or installation is claimed.
+- Verified on 2026-10-23 with Xcode 27.1 (27A9275); first-launch components installed successfully.
+- Full iOS Simulator build succeeded, including SwiftData macros and all iOS-only services. Build log: `/tmp/momi-xcode-build.log`.
+- Full iPhone device build succeeded with signing disabled. This checks compilation/linking; installation still requires selecting a development team. Build log: `/tmp/momi-device-build.log`.
+- `swift test --package-path Momi/MomiCore --scratch-path /tmp/momi-xcode-tests` passed all 15 Swift Testing tests. Test log: `/tmp/momi-core-tests.log`.
+- Fixed AppStore initialization to initialize its notification service before accessing observable state for attachment cleanup.
+- Simulator launch and UI/runtime checks remain pending: no iOS Simulator runtime was installed. An iOS runtime download was started with `xcodebuild -downloadPlatform iOS`; progress is in `/tmp/momi-runtime-download.log`. Once installed, select an iPhone simulator in Xcode and Run.
+- Camera/OCR accuracy, notification delivery, persistence across app launches, and device authentication still require the acceptance checks below. A successful build alone does not establish those behaviors.
 
 ## Device acceptance checks before use
 

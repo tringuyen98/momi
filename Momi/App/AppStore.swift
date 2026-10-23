@@ -15,8 +15,8 @@ import MomiCore
     init(persistence: Persistence, files: AttachmentService) throws {
         self.persistence = persistence; self.files = files
         snapshot = try persistence.load()
-        files.cleanup(keeping: snapshot)
         notifications = NotificationService()
+        files.cleanup(keeping: snapshot)
         notifications.onAction = { [weak self] action, occurrence in
             guard let self else { return }
             if let occurrence, action == "taken" || action == "snooze" {
