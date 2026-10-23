@@ -20,7 +20,7 @@ public enum DataExport {
             let plan = ScheduleEngine.plan(for: s, day: today)
             let status = s.pauses.contains { $0.through == nil } ? " — đang tạm dừng" : ""
             lines.append(s.name + status)
-            if let plan { lines.append("Lượng dùng đã nhập: " + plan.amount + "; giờ: " + plan.slots.map(\.label).joined(separator: ", ")) }
+            if let plan { lines.append("Lượng dùng đã nhập: " + plan.summary + "; giờ: " + plan.slots.map(\.label).joined(separator: ", ")) }
             lines.append(s.instructions)
         }
         lines.append("CÁC MŨI TIÊM ĐÃ GHI NHẬN")

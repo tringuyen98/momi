@@ -34,11 +34,11 @@ swift run --package-path MomiCore MomiCoreChecks
 
 - Four tabs, redesigned onboarding with a soft botanical mark, stage cards, optional dates, fixed bottom start button and an animated welcome-to-home transition; preparation/pregnancy stage, due-date-based age estimate, and stage change history. Pregnancy Journey follows the supplied design with a pink age/due-date card, horizontal week selector, Mother/Baby stage summaries, next examination appointment, stage-filtered checklist, and nutrition/journal/ultrasound shortcuts.
 - Checklist CRUD, groups, completion/undo/archive, dates and reminders. Home includes undated/overdue/today tasks, plus a separate upcoming preview, derived from the same saved snapshot.
-- Supplements with ingredients, versioned schedules, weekday/time slots, end dates, pause/resume intervals, intake history and snooze.
+- Supplements with ingredients, optional structured quantity/unit per intake, 1–6 editable daily time slots, versioned schedules, weekdays, end dates, pause/resume intervals, intake history and snooze. Home uses “Lịch uống hôm nay”, with one compact card per product, separate check-off rows per time, reminder hours and direct edit/add controls. Active and paused products are both editable from the full product list. The editor uses a single numeric quantity/unit row with minus/plus controls; there is no free-text dose entry. Dates and optional notes/ingredients are collapsed sections. Legacy free-text amounts remain read-only reference text until the user explicitly supplies a numeric per-intake quantity; canceling preserves the original record.
 - Local notification scheduling, authenticated lock-screen intake actions, privacy-preserving notification text, authorization status and coverage display.
 - Vaccine records grouped by disease category, editable confirmed dose-plan counts, multiple numbered doses per record, and confirmed deletion of one dose or the entire record. Deleting a record cancels its scheduled appointments/reminders while preserving appointment history and shared attachments. Both manual entry and OCR review can select an existing record. Includes appointment links, multi-page native document scan, photo/PDF import, on-device OCR, editable review and optional duplicate merging.
 - Medical appointments, questions, reschedule/cancel/complete and linked health records.
-- Image/PDF attachments, Quick Look, journal, daily symptoms and period-start logs. Preparation mode includes a monthly calendar with recorded period days, predicted next period, estimated ovulation/fertile interval, persistent cycle settings, and period entry after onboarding. Accessible from Home, Journey and Settings.
+- Image/PDF attachments, Quick Look, journal, daily symptoms and period-start logs. Preparation mode includes a monthly calendar with recorded period days, predicted next period, estimated ovulation/fertile interval, persistent cycle settings, and period entry after onboarding. Accessible from Journey and Settings; the duplicate cycle card is removed from Home.
 - Small bundled Vietnamese knowledge/food library with source links, bookmarks, preferences, allergen tags and meal planning.
 - Device authentication lock, encrypted backup/restore, intake CSV export and iOS PDF visit summary.
 - Ultrasound albums tied explicitly to weeks 0–42: photo/PDF import, native document-camera capture, local thumbnails/Quick Look, examination date, notes, edit/move/delete and encrypted backup/restore of original files. Changing the due date never silently reassigns stored photos. The complete album is also available from Mother’s Book, including after changing stages.
@@ -110,7 +110,7 @@ The content library is a small initial set, with source links and no claim of cl
 5. Export backup, restore into a separate test installation, and compare records plus image/PDF contents. Test wrong password and corrupted files.
 6. Verify Face ID/passcode, app switcher cover, camera permission denial, Dynamic Type, keyboard and VoiceOver on the actual iPhone.
 7. Verify CSV/PDF exports and all dates/times in Asia/Ho_Chi_Minh and after a timezone change.
-8. Skip period entry during onboarding, then add it through Home/Journey/Settings. Change cycle length, navigate calendar months and select a day. Confirm recorded days and estimated days have distinct legends. Switch to pregnancy mode and confirm fertility predictions disappear.
+8. Skip period entry during onboarding, then add it through Journey/Settings. Change cycle length, navigate calendar months and select a day. Confirm recorded days and estimated days have distinct legends. Switch to pregnancy mode and confirm fertility predictions disappear.
 9. Add undated, today, overdue and future checklist tasks; return Home and check the correct sections. Complete a task on Home and confirm the shared checklist updates.
 10. Assign a legacy vaccine to a category, set its confirmed planned count, and add multiple doses through manual/OCR entry using the existing-record picker. Delete one dose, then test deleting a separate test vaccine with pending reminders and a shared attachment.
 
@@ -134,3 +134,13 @@ After a successful save, a soft circular reveal grows from near the start button
 Existing users can choose **Cài đặt → Xem lại màn chào Momi** to preview both the layout and transition without changing their saved profile or records. No deletion/reinstallation is needed. The preview's Close button exits without starting the animation.
 
 The iPhone build succeeds. No simulator runtime is installed, so visual/timing verification on-device remains pending. Check the new screen on the intended iPhone, with the keyboard, both stage/date options, large accessibility text and Reduce Motion. Also test rapid repeated Start taps and background/foreground during the entrance.
+
+
+### Daily supplement UI verification
+
+On iPhone, add a product with a user-entered quantity/unit and three distinct daily times. Confirm Home shows one compact product card, the quantity per intake and frequency, all three reminder hours, and independent check-off controls. Edit from the pencil without pausing; confirm the future start date is explicit and the pending plan appears on the card. Open a legacy product and verify its original amount is displayed as reference, saving requires an explicit numeric quantity, and canceling leaves the original record unchanged. Verify fractional amounts, duplicate-time validation, disabled notifications, denied notification permission, pause/resume and large text. Reminder delivery on a locked physical iPhone still requires device verification.
+
+
+### Deleting a supplement
+
+Swipe left on a row in **Vitamin & bổ sung → Tất cả sản phẩm** to reveal Delete, or open the product/detail editor and choose **Xóa sản phẩm**. Both paths ask for confirmation; a full swipe does not delete automatically. Successful deletion removes the product and its snoozes, refreshes pending notifications and cleans up unshared attachments. Self-contained intake history remains visible in the existing history screen. Verify swipe, cancel, confirmed deletion and back navigation on iPhone.

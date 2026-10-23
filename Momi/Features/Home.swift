@@ -4,6 +4,7 @@ import MomiCore
 struct TodayView: View {
     @Environment(AppStore.self) private var store
     @State private var quickLog = false
+    @State private var addingSupplement = false
     var upcoming: [Appointment] { store.snapshot.appointments.filter { $0.status == .scheduled && $0.date >= Date() }.sorted { $0.date < $1.date } }
     var tasks: [ChecklistItem] { DashboardChecklist.due(store.snapshot.tasks, on: store.today) }
     var futureTasks: [ChecklistItem] { DashboardChecklist.upcoming(store.snapshot.tasks, after: store.today) }
@@ -12,9 +13,6 @@ struct TodayView: View {
             Text(Date().formatted(.dateTime.weekday(.wide).day().month().locale(Locale(identifier: "vi_VN")))).font(.subheadline).foregroundStyle(MomiTheme.muted)
             Text("Chào \(store.snapshot.profile.name.isEmpty ? "bạn" : store.snapshot.profile.name)").font(.largeTitle.bold())
             Label(store.snapshot.profile.stage.title, systemImage: "leaf").font(.subheadline).foregroundStyle(MomiTheme.green)
-            if store.snapshot.profile.stage == .preparation {
-                NavigationLink { CycleView() } label: { CycleSummaryCard() }.buttonStyle(.plain)
-            }
             SectionHeading(title: "Sắp tới")
             if let a = upcoming.first {
                 NavigationLink { AppointmentDetail(id: a.id) } label: {
@@ -26,7 +24,14 @@ struct TodayView: View {
                     }.frame(maxWidth: .infinity, alignment: .leading).padding(20).foregroundStyle(.white).background(MomiTheme.green, in: RoundedRectangle(cornerRadius: 20))
                 }.buttonStyle(.plain)
             } else { MomiCard { Text("Hôm nay chưa có lịch hẹn."); NavigationLink("Thêm lịch khi bạn cần") { AppointmentsView() } } }
-            HStack { SectionHeading(title: "Vitamin hôm nay"); Spacer(); NavigationLink("Lịch uống") { SupplementsView() }.font(.subheadline) }
+            HStack {
+                SectionHeading(title: "Lịch uống hôm nay")
+                Spacer()
+                NavigationLink("Quản lý") { SupplementsView() }.font(.subheadline)
+                Button { addingSupplement = true } label: {
+                    Image(systemName: "plus.circle.fill").font(.title3).frame(minWidth: 44, minHeight: 44)
+                }.accessibilityLabel("Thêm sản phẩm bổ sung")
+            }
             DailyIntakeSection(day: store.today)
             SectionHeading(title: "Việc hôm nay")
             MomiCard {
@@ -46,6 +51,7 @@ struct TodayView: View {
             }
         }.toolbar { ToolbarItem(placement: .primaryAction) { NavigationLink { SettingsView() } label: { Image(systemName: "gearshape").accessibilityLabel("Cài đặt") } } }
             .sheet(isPresented: $quickLog) { NavigationStack { DailyLogEditor(day: store.today) } }
+            .sheet(isPresented: $addingSupplement) { NavigationStack { SupplementEditor(supplement: Supplement(name: ""), isNew: true) } }
     }
 }
 

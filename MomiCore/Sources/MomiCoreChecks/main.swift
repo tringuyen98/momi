@@ -11,6 +11,36 @@ import MomiCore
         plan.slots = [DoseSlot(hour: 8, minute: 0), DoseSlot(hour: 20, minute: 0)]
         s.schedules = [plan]; return s
     }
+    func deletingSupplementKeepsLogsAndOtherProductsButCancelsReminders() throws {
+        var snapshot = Snapshot()
+        var removed = product()
+        let other = product()
+        let shared = Attachment(filename: "shared.jpg", displayName: "Shared")
+        let unique = Attachment(filename: "unique.jpg", displayName: "Unique")
+        removed.attachmentIDs = [shared.id, unique.id]
+        snapshot.attachments = [shared, unique]
+        var journal = JournalEntry(day: "2026-10-23", text: "Note")
+        journal.attachmentIDs = [shared.id]
+        snapshot.journal = [journal]
+        snapshot.supplements = [removed, other]
+        let doses = ScheduleEngine.occurrences([removed], day: "2026-10-23", calendar: calendar)
+        let otherDose = ScheduleEngine.occurrences([other], day: "2026-10-23", calendar: calendar)[1]
+        ScheduleEngine.record(doses[0], status: .taken, at: date("2026-10-23", 8), in: &snapshot)
+        snapshot.snoozes = [Snooze(occurrenceID: doses[1].id, until: date("2026-10-23", 21)), Snooze(occurrenceID: otherDose.id, until: date("2026-10-23", 22))]
+        let originalLogs = snapshot.intakes
+        SupplementManagement.remove(removed.id, from: &snapshot)
+        expect(snapshot.supplements == [other])
+        expect(snapshot.intakes == originalLogs)
+        expect(snapshot.snoozes.map(\.occurrenceID) == [otherDose.id])
+        expect(snapshot.attachments == [shared])
+        let reminders = ReminderPlanner.make(snapshot: snapshot, now: date("2026-10-23", 9), calendar: calendar)
+        expect(!reminders.requests.isEmpty)
+        expect(reminders.requests.allSatisfy { $0.occurrence?.supplementID == other.id })
+        try BackupPayload(snapshot: snapshot, files: ["shared.jpg": Data()]).validate()
+        let once = snapshot
+        SupplementManagement.remove(removed.id, from: &snapshot)
+        expect(snapshot == once)
+    }
     func dateValidation() {
         expect(Day.parseVietnamese("31/02/2026") == nil)
         expect(Day.parseVietnamese("29/02/2024") == "2024-02-29")
@@ -31,6 +61,63 @@ import MomiCore
         expect(snapshot.intakes[0].amount == "1 viên")
         changed.effectiveFrom = "2026-10-23"
         expectThrows( ValidationError.self) { try ScheduleEngine.replaceFuturePlan(changed, in: &s, today: "2026-10-23") }
+    }
+    func legacyIntakeSchedulesKeepFreeTextDose() throws {
+        let original = product().schedules[0]
+        let encoded = try JSONEncoder().encode(original)
+        let json = try JSONSerialization.jsonObject(with: encoded) as! [String: Any]
+        expect(json["serving"] == nil)
+        let decoded = try JSONDecoder().decode(IntakeSchedule.self, from: encoded)
+        expect(decoded.serving == nil)
+        expect(decoded.doseLabel == "1 viên")
+        expect(decoded.slots == original.slots)
+    }
+    func structuredServingRemindsEachDailyIntakeIndependently() throws {
+        var snapshot = Snapshot()
+        var supplement = product()
+        supplement.name = "Axit folic"
+        supplement.schedules[0].serving = ServingAmount(quantity: 2, unit: "viên")
+        supplement.schedules[0].slots = [DoseSlot(hour: 8, minute: 0), DoseSlot(hour: 12, minute: 0), DoseSlot(hour: 20, minute: 0)]
+        snapshot.supplements = [supplement]
+        let occurrences = ScheduleEngine.occurrences(snapshot.supplements, day: "2026-10-23", calendar: calendar)
+        expect(occurrences.count == 3)
+        expect(Set(occurrences.map(\.id)).count == 3)
+        expect(occurrences.allSatisfy { $0.amount == "2 viên/lần" })
+        let reminders = ReminderPlanner.make(snapshot: snapshot, now: date("2026-10-23", 7), calendar: calendar, horizonDays: 1)
+        expect(reminders.requests.map(\.date) == occurrences.map(\.scheduledAt))
+        expect(reminders.requests.allSatisfy { $0.body == "Axit folic · 2 viên/lần" })
+        ScheduleEngine.record(occurrences[0], status: .taken, at: date("2026-10-23", 8), in: &snapshot)
+        let remaining = ReminderPlanner.make(snapshot: snapshot, now: date("2026-10-23", 8), calendar: calendar, horizonDays: 1)
+        expect(remaining.requests.count == 2)
+        expect(snapshot.intakes[0].amount == "2 viên/lần")
+        let payload = BackupPayload(snapshot: snapshot, files: [:])
+        try payload.validate()
+        let decoded = try JSONDecoder().decode(Snapshot.self, from: JSONEncoder().encode(snapshot))
+        expect(decoded == snapshot)
+    }
+    func servingEditPreservesHistoryAndReplacesFutureReminders() throws {
+        var snapshot = Snapshot(); snapshot.supplements = [product()]
+        let today = ScheduleEngine.occurrences(snapshot.supplements, day: "2026-10-23", calendar: calendar)
+        ScheduleEngine.record(today[0], status: .taken, at: date("2026-10-23"), in: &snapshot)
+        var updated = IntakeSchedule(from: "2026-10-24", amount: "0,5 ml/lần")
+        updated.serving = ServingAmount(quantity: 0.5, unit: "ml")
+        updated.slots = [DoseSlot(hour: 10, minute: 0), DoseSlot(hour: 18, minute: 0), DoseSlot(hour: 22, minute: 0)]
+        try ScheduleEngine.replaceFuturePlan(updated, in: &snapshot.supplements[0], today: "2026-10-23")
+        expect(ScheduleEngine.occurrences(snapshot.supplements, day: "2026-10-23", calendar: calendar) == today)
+        expect(snapshot.intakes[0].amount == "1 viên")
+        let reminders = ReminderPlanner.make(snapshot: snapshot, now: date("2026-10-24", 7), calendar: calendar, horizonDays: 1)
+        expect(reminders.requests.count == 3)
+        expect(reminders.requests.allSatisfy { $0.occurrence?.amount == "0,5 ml/lần" })
+        expect(reminders.requests.map { calendar.component(.hour, from: $0.date) } == [10, 18, 22])
+        snapshot.supplements[0].schedules[1].notifications = false
+        expect(ReminderPlanner.make(snapshot: snapshot, now: date("2026-10-24", 7), calendar: calendar, horizonDays: 1).requests.isEmpty)
+    }
+    func backupRejectsInvalidServingAmounts() {
+        for invalid in [ServingAmount(quantity: 0, unit: "viên"), ServingAmount(quantity: -1, unit: "ml"), ServingAmount(quantity: .infinity, unit: "viên"), ServingAmount(quantity: 1, unit: " ")] {
+            var snapshot = Snapshot(); snapshot.supplements = [product()]
+            snapshot.supplements[0].schedules[0].serving = invalid
+            expectThrows( ValidationError.self) { try BackupPayload(snapshot: snapshot, files: [:]).validate() }
+        }
     }
     func recordIsIdempotent() {
         let o = ScheduleEngine.occurrences([product()], day: "2026-10-23", calendar: calendar)[0]
@@ -340,10 +427,20 @@ import MomiCore
 @main struct Runner {
     @MainActor static func main() throws {
         let tests = CoreTests()
+        try tests.deletingSupplementKeepsLogsAndOtherProductsButCancelsReminders()
+        print("PASS deletingSupplementKeepsLogsAndOtherProductsButCancelsReminders")
         tests.dateValidation()
         print("PASS dateValidation")
         try tests.futureChangesPreservePastAndDoseSnapshots()
         print("PASS futureChangesPreservePastAndDoseSnapshots")
+        try tests.legacyIntakeSchedulesKeepFreeTextDose()
+        print("PASS legacyIntakeSchedulesKeepFreeTextDose")
+        try tests.structuredServingRemindsEachDailyIntakeIndependently()
+        print("PASS structuredServingRemindsEachDailyIntakeIndependently")
+        try tests.servingEditPreservesHistoryAndReplacesFutureReminders()
+        print("PASS servingEditPreservesHistoryAndReplacesFutureReminders")
+        tests.backupRejectsInvalidServingAmounts()
+        print("PASS backupRejectsInvalidServingAmounts")
         tests.recordIsIdempotent()
         print("PASS recordIsIdempotent")
         tests.weekdaysAndEndDate()

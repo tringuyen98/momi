@@ -54,7 +54,7 @@ public enum ScheduleEngine {
                 guard let date = calendar.date(bySettingHour: slot.hour, minute: slot.minute, second: 0, of: base) else { return nil }
                 guard !supplement.pauses.contains(where: { $0.from <= date && ($0.through.map { date < $0 } ?? true) }) else { return nil }
                 return IntakeOccurrence(id: "\(plan.id.uuidString)|\(slot.id.uuidString)|\(day)", supplementID: supplement.id,
-                    scheduleID: plan.id, day: day, scheduledAt: date, name: supplement.name, amount: plan.amount, notifications: plan.notifications)
+                    scheduleID: plan.id, day: day, scheduledAt: date, name: supplement.name, amount: plan.doseLabel, notifications: plan.notifications)
             }
         }.sorted { $0.scheduledAt < $1.scheduledAt }
     }
@@ -128,5 +128,24 @@ public enum ReminderPlanner {
         return ReminderPlan(requests: (selectedOther + selectedDoses).sorted { $0.date < $1.date },
             intakeCoverageThrough: selectedDoses.last?.date,
             truncated: selectedDoses.count < doses.count || selectedOther.count < other.count)
+    }
+}
+
+public enum SupplementManagement {
+    public static func remove(_ id: UUID, from snapshot: inout Snapshot) {
+        guard let product = snapshot.supplements.first(where: { $0.id == id }) else { return }
+        let scheduleIDs = Set(product.schedules.map { $0.id.uuidString })
+        let recordedIDs = Set(snapshot.intakes.filter { $0.supplementID == id }.map(\.id))
+        snapshot.snoozes.removeAll { snooze in
+            let scheduleID = snooze.occurrenceID.split(separator: "|").first.map(String.init) ?? ""
+            return scheduleIDs.contains(scheduleID) || recordedIDs.contains(snooze.occurrenceID)
+        }
+        snapshot.supplements.removeAll { $0.id == id }
+        // Intake logs are self-contained snapshots and intentionally outlive their product.
+        let candidates = Set(product.attachmentIDs)
+        let used = Set(snapshot.supplements.flatMap(\.attachmentIDs) + snapshot.vaccinations.flatMap(\.attachmentIDs)
+                       + snapshot.records.flatMap(\.attachmentIDs) + snapshot.journal.flatMap(\.attachmentIDs)
+                       + snapshot.ultrasounds.flatMap(\.attachmentIDs))
+        snapshot.attachments.removeAll { candidates.contains($0.id) && !used.contains($0.id) }
     }
 }

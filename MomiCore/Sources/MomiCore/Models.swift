@@ -60,9 +60,23 @@ public struct IntakeSchedule: Identifiable, Codable, Equatable, Sendable {
     public var weekdays: [Int] = [1, 2, 3, 4, 5, 6, 7] // Foundation: Sunday = 1
     public var slots: [DoseSlot] = []
     public var amount: String
+    // Optional so existing schedules keep their original free-text dose unchanged.
+    public var serving: ServingAmount?
     public var enabled = true
     public var notifications = true
     public init(from: String, amount: String) { effectiveFrom = from; self.amount = amount }
+    public var doseLabel: String { serving?.label ?? amount }
+    public var frequencyLabel: String { "\(slots.count) lần/ngày" }
+    public var summary: String { doseLabel + " · " + frequencyLabel }
+}
+public struct ServingAmount: Codable, Equatable, Sendable {
+    public var quantity: Double
+    public var unit: String
+    public init(quantity: Double, unit: String) { self.quantity = quantity; self.unit = unit }
+    public var isValid: Bool { quantity.isFinite && quantity > 0 && !unit.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    public var label: String {
+        quantity.formatted(.number.locale(Locale(identifier: "vi_VN"))) + " " + unit + "/lần"
+    }
 }
 public struct Supplement: Identifiable, Codable, Equatable, Sendable {
     public var id: UUID = UUID()

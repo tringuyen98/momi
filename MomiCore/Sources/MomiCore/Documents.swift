@@ -71,6 +71,7 @@ public struct BackupPayload: Codable, Sendable {
             guard unique(supplement.schedules), Set(supplement.schedules.map(\.effectiveFrom)).count == supplement.schedules.count else { throw ValidationError.message("Lịch uống bị trùng phiên bản.") }
             for plan in supplement.schedules {
                 guard Day.date(plan.effectiveFrom) != nil,
+                      plan.serving.map({ $0.isValid }) ?? true,
                       plan.effectiveThrough.map({ Day.date($0) != nil && $0 >= plan.effectiveFrom }) ?? true,
                       unique(plan.slots), plan.slots.allSatisfy({ (0...23).contains($0.hour) && (0...59).contains($0.minute) }),
                       !plan.weekdays.isEmpty, plan.weekdays.allSatisfy({ (1...7).contains($0) }) else { throw ValidationError.message("Lịch uống trong backup không hợp lệ.") }
