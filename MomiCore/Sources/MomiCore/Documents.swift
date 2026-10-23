@@ -12,6 +12,8 @@ public struct OCRLine: Codable, Equatable, Sendable {
 public struct VaccineDraft: Identifiable, Equatable, Sendable {
     public var id = UUID()
     public var name = ""
+    public var vaccineID: UUID?
+    public var category: VaccineCategory = .other
     public var product = ""
     public var number = ""
     public var injectedDateText = ""
@@ -53,12 +55,18 @@ public struct BackupPayload: Codable, Sendable {
     public init(snapshot: Snapshot, files: [String: Data]) { self.snapshot = snapshot; self.files = files; createdAt = Date() }
     public func validate() throws {
         guard snapshot.schemaVersion == 1 else { throw ValidationError.message("Phiên bản backup chưa được hỗ trợ.") }
+        guard snapshot.profile.cycleLength.map({ (15...60).contains($0) }) ?? true,
+              snapshot.profile.periodLength.map({ (1...14).contains($0) }) ?? true,
+              snapshot.vaccines.allSatisfy({ $0.plannedDoseCount.map { (1...20).contains($0) } ?? true }) else {
+            throw ValidationError.message("Thiết lập chu kỳ hoặc số mũi vaccine trong backup không hợp lệ.")
+        }
         func unique<T: Identifiable>(_ values: [T]) -> Bool where T.ID: Hashable { Set(values.map(\.id)).count == values.count }
         guard unique(snapshot.tasks), unique(snapshot.supplements), unique(snapshot.intakes), unique(snapshot.appointments),
               unique(snapshot.vaccines), unique(snapshot.vaccinations), unique(snapshot.attachments), unique(snapshot.records),
-              unique(snapshot.journal), unique(snapshot.dailyLogs), unique(snapshot.meals) else { throw ValidationError.message("Backup có bản ghi trùng.") }
-        let days = snapshot.dailyLogs.map(\.day) + snapshot.vaccinations.map(\.day) + snapshot.journal.map(\.day) + snapshot.records.map(\.day) + snapshot.meals.map(\.day) + snapshot.intakes.map(\.day) + snapshot.tasks.compactMap(\.dueDay)
+              unique(snapshot.journal), unique(snapshot.dailyLogs), unique(snapshot.meals), unique(snapshot.ultrasounds) else { throw ValidationError.message("Backup có bản ghi trùng.") }
+        let days = snapshot.dailyLogs.map(\.day) + snapshot.vaccinations.map(\.day) + snapshot.journal.map(\.day) + snapshot.records.map(\.day) + snapshot.meals.map(\.day) + snapshot.intakes.map(\.day) + snapshot.tasks.compactMap(\.dueDay) + snapshot.ultrasounds.map(\.day)
         guard days.allSatisfy({ Day.date($0) != nil }), snapshot.profile.dueDate.map({ Day.date($0) != nil }) ?? true else { throw ValidationError.message("Ngày trong backup không hợp lệ.") }
+        guard snapshot.ultrasounds.allSatisfy({ (0...42).contains($0.week) && !$0.attachmentIDs.isEmpty }) else { throw ValidationError.message("Tuần hoặc ảnh siêu âm trong backup không hợp lệ.") }
         for supplement in snapshot.supplements {
             guard unique(supplement.schedules), Set(supplement.schedules.map(\.effectiveFrom)).count == supplement.schedules.count else { throw ValidationError.message("Lịch uống bị trùng phiên bản.") }
             for plan in supplement.schedules {
@@ -76,7 +84,7 @@ public struct BackupPayload: Codable, Sendable {
         guard Set(snapshot.intakes.map(\.id)).count == snapshot.intakes.count,
               Set(snapshot.attachments.map(\.id)).count == snapshot.attachments.count else { throw ValidationError.message("Backup có bản ghi trùng.") }
         let attachmentIDs = Set(snapshot.attachments.map(\.id))
-        let referenced = snapshot.records.flatMap(\.attachmentIDs) + snapshot.journal.flatMap(\.attachmentIDs) + snapshot.vaccinations.flatMap(\.attachmentIDs) + snapshot.supplements.flatMap(\.attachmentIDs)
+        let referenced = snapshot.records.flatMap(\.attachmentIDs) + snapshot.journal.flatMap(\.attachmentIDs) + snapshot.vaccinations.flatMap(\.attachmentIDs) + snapshot.supplements.flatMap(\.attachmentIDs) + snapshot.ultrasounds.flatMap(\.attachmentIDs)
         guard Set(referenced).isSubset(of: attachmentIDs),
               Set(snapshot.vaccinations.map(\.vaccineID)).isSubset(of: Set(snapshot.vaccines.map(\.id))) else { throw ValidationError.message("Liên kết trong backup bị thiếu.") }
     }

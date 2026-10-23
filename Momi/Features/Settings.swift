@@ -39,6 +39,7 @@ struct SettingsView: View {
             Section("Của bạn") {
                 Button("Tên: " + (store.snapshot.profile.name.isEmpty ? "Chưa đặt" : store.snapshot.profile.name)) { name = store.snapshot.profile.name; rename = true }
                 NavigationLink("Giai đoạn: " + store.snapshot.profile.stage.title) { StageEditor() }
+                if store.snapshot.profile.stage == .preparation { NavigationLink("Kỳ kinh & thiết lập chu kỳ") { CycleView() } }
                 Text("Dữ liệu lưu trên thiết bị, không có tài khoản hoặc máy chủ Momi.").font(.footnote)
             }
             Section("Thông báo") {
@@ -70,7 +71,7 @@ struct SettingsView: View {
                 if let message { Text(message).font(.footnote) }
             }
             Section("Quản lý dữ liệu") {
-                Text("\(store.snapshot.attachments.count) file · \(store.snapshot.intakes.count) bản ghi uống · \(store.snapshot.vaccinations.count) mũi tiêm").font(.footnote)
+                Text("\(store.snapshot.attachments.count) file · \(store.snapshot.intakes.count) bản ghi uống · \(store.snapshot.vaccinations.count) mũi tiêm · \(store.snapshot.ultrasounds.count) lần siêu âm").font(.footnote)
                 Button("Xuất lịch uống CSV") {
                     exportDocument = MomiBackupDocument(data: Data(DataExport.intakeCSV(store.snapshot).utf8)); exportType = .commaSeparatedText; exportName = "Momi-lich-uong.csv"; exportedBackup = false; exporting = true
                 }

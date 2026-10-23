@@ -99,12 +99,13 @@ import MomiCore
 }
 
 enum Route: String, Identifiable, Hashable {
-    case checklist, cycle, nutrition, supplements, intakeHistory, vaccines, appointments, records, journal, settings
+    case checklist, cycle, nutrition, ultrasounds, supplements, intakeHistory, vaccines, appointments, records, journal, settings
     var id: String { rawValue }
     var title: String {
         switch self {
         case .checklist: "Checklist của mẹ"; case .cycle: "Chu kỳ & cảm nhận"; case .nutrition: "Dinh dưỡng & bổ sung"
         case .supplements: "Vitamin & bổ sung"; case .intakeHistory: "Lịch sử uống"; case .vaccines: "Vaccine"
+        case .ultrasounds: "Ảnh siêu âm"
         case .appointments: "Lịch hẹn"; case .records: "Hồ sơ sức khỏe"; case .journal: "Nhật ký"; case .settings: "Cài đặt"
         }
     }

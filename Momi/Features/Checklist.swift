@@ -34,7 +34,7 @@ struct TaskCheckRow: View {
             Button { editing = true } label: {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(item.title).foregroundStyle(MomiTheme.ink).strikethrough(item.status == .done)
-                    Text(item.group + (item.dueDay.map { " · " + Day.display($0) } ?? "")).font(.caption).foregroundStyle(MomiTheme.muted)
+                    Text(item.group + (item.stage.map { " · " + $0.title } ?? "") + (item.dueDay.map { " · " + Day.display($0) } ?? "")).font(.caption).foregroundStyle(MomiTheme.muted)
                 }.frame(maxWidth: .infinity, alignment: .leading)
             }.buttonStyle(.plain)
         }.sheet(isPresented: $editing) { NavigationStack { TaskEditor(item: item) } }
@@ -52,10 +52,16 @@ struct TaskEditor: View {
     var body: some View {
         Form {
             Section("Việc của bạn") { TextField("Tên việc", text: $item.title); TextField("Nhóm", text: $item.group); TextField("Ghi chú", text: $item.notes, axis: .vertical).lineLimit(3...7) }
+            Section("Giai đoạn") {
+                Picker("Dành cho", selection: $item.stage) {
+                    Text("Mọi giai đoạn").tag(Optional<Stage>.none)
+                    ForEach(Stage.allCases, id: \.self) { Text($0.title).tag(Optional($0)) }
+                }
+            }
             Section("Thời gian") { Toggle("Đặt ngày thực hiện", isOn: $hasDate); if hasDate { DatePicker("Ngày", selection: $date, displayedComponents: .date) }; Toggle("Nhắc tôi", isOn: $hasReminder); if hasReminder { DatePicker("Nhắc lúc", selection: $reminder) } }
             if let validation { Text(validation).foregroundStyle(.red) }
         }.momiForm().navigationTitle("Việc cần chuẩn bị")
-            .onAppear { hasDate = item.dueDay != nil; date = item.dueDay.flatMap { Day.date($0) } ?? Date(); hasReminder = item.reminder != nil; reminder = item.reminder ?? Date().addingTimeInterval(3600) }
+            .onAppear { if item.stage == nil && !store.snapshot.tasks.contains(where: { $0.id == item.id }) { item.stage = store.snapshot.profile.stage }; hasDate = item.dueDay != nil; date = item.dueDay.flatMap { Day.date($0) } ?? Date(); hasReminder = item.reminder != nil; reminder = item.reminder ?? Date().addingTimeInterval(3600) }
             .editorToolbar(save: {
                 guard !item.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { validation = "Hãy đặt tên cho việc này."; return }
                 guard !hasReminder || reminder > Date() else { validation = "Giờ nhắc cần nằm trong tương lai."; return }

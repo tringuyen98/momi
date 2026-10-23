@@ -10,6 +10,7 @@ public struct Profile: Codable, Equatable, Sendable {
     public var stage: Stage = .preparation
     public var dueDate: String?
     public var cycleLength: Int?
+    public var periodLength: Int?
     public var onboarded = false
     public var hideNotificationDetails = true
     public var appLock = false
@@ -33,6 +34,7 @@ public struct ChecklistItem: Identifiable, Codable, Equatable, Sendable {
     public var dueDay: String?
     public var reminder: Date?
     public var status: TaskStatus = .todo
+    public var stage: Stage?
     public var appointmentID: UUID?
     public init(title: String) { self.title = title }
 }
@@ -128,11 +130,28 @@ public struct Appointment: Identifiable, Codable, Equatable, Sendable {
     public var previousDate: Date?
     public init(title: String, date: Date) { self.title = title; self.date = date }
 }
+public enum VaccineCategory: String, Codable, CaseIterable, Sendable {
+    case hepatitisB, mmr, chickenpox, hpv, influenza, tdap, other
+    public var title: String {
+        switch self {
+        case .hepatitisB: "Viêm gan B"
+        case .mmr: "Sởi · quai bị · rubella"
+        case .chickenpox: "Thủy đậu"
+        case .hpv: "HPV"
+        case .influenza: "Cúm"
+        case .tdap: "Uốn ván · bạch hầu · ho gà"
+        case .other: "Khác / chưa phân loại"
+        }
+    }
+}
 public struct VaccineRecord: Identifiable, Codable, Equatable, Sendable {
     public var id: UUID = UUID()
     public var name: String
     public var notes = ""
+    public var category: VaccineCategory?
+    public var plannedDoseCount: Int?
     public init(name: String) { self.name = name }
+    public var group: VaccineCategory { category ?? .other }
 }
 public struct VaccinationDose: Identifiable, Codable, Equatable, Sendable {
     public var id: UUID = UUID()
@@ -191,6 +210,14 @@ public struct MealPlanEntry: Identifiable, Codable, Equatable, Sendable {
     public var foodID: String
     public init(day: String, foodID: String) { self.day = day; self.foodID = foodID }
 }
+public struct UltrasoundEntry: Identifiable, Codable, Equatable, Sendable {
+    public var id = UUID()
+    public var week: Int
+    public var day: String
+    public var notes = ""
+    public var attachmentIDs: [UUID] = []
+    public init(week: Int, day: String) { self.week = week; self.day = day }
+}
 public struct Snapshot: Codable, Equatable, Sendable {
     public var schemaVersion = 1
     public var profile = Profile()
@@ -208,5 +235,32 @@ public struct Snapshot: Codable, Equatable, Sendable {
     public var meals: [MealPlanEntry] = []
     public var bookmarks: [String] = []
     public var savedFoods: [String] = []
+    public var ultrasounds: [UltrasoundEntry] = []
     public init() {}
+
+    private enum CodingKeys: String, CodingKey {
+        case schemaVersion, profile, tasks, supplements, intakes, snoozes, appointments, vaccines, vaccinations,
+             attachments, records, journal, dailyLogs, meals, bookmarks, savedFoods, ultrasounds
+    }
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        schemaVersion = try c.decode(Int.self, forKey: .schemaVersion)
+        profile = try c.decode(Profile.self, forKey: .profile)
+        tasks = try c.decode([ChecklistItem].self, forKey: .tasks)
+        supplements = try c.decode([Supplement].self, forKey: .supplements)
+        intakes = try c.decode([IntakeLog].self, forKey: .intakes)
+        snoozes = try c.decode([Snooze].self, forKey: .snoozes)
+        appointments = try c.decode([Appointment].self, forKey: .appointments)
+        vaccines = try c.decode([VaccineRecord].self, forKey: .vaccines)
+        vaccinations = try c.decode([VaccinationDose].self, forKey: .vaccinations)
+        attachments = try c.decode([Attachment].self, forKey: .attachments)
+        records = try c.decode([HealthRecord].self, forKey: .records)
+        journal = try c.decode([JournalEntry].self, forKey: .journal)
+        dailyLogs = try c.decode([DailyHealthLog].self, forKey: .dailyLogs)
+        meals = try c.decode([MealPlanEntry].self, forKey: .meals)
+        bookmarks = try c.decode([String].self, forKey: .bookmarks)
+        savedFoods = try c.decode([String].self, forKey: .savedFoods)
+        // Backups from before weekly ultrasound uploads have no such key.
+        ultrasounds = try c.decodeIfPresent([UltrasoundEntry].self, forKey: .ultrasounds) ?? []
+    }
 }

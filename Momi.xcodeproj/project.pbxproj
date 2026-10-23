@@ -27,6 +27,8 @@
 		E71C53525D614576EDFAF8CF /* Momi/App/AppStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3013BA0B23BDE052CFE8723B /* Momi/App/AppStore.swift */; };
 		EB1AEDAF088CB89C85F563D1 /* Momi/Features/Vaccines.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC4183A304DF214657B58396 /* Momi/Features/Vaccines.swift */; };
 		FCAB9C452490DF2BF98917BE /* Momi/Features/Appointments.swift in Sources */ = {isa = PBXBuildFile; fileRef = C66916A13934FB0CFA460734 /* Momi/Features/Appointments.swift */; };
+		A81B22B7E782AB365C8302C9 /* Momi/Features/PregnancyJourney.swift in Sources */ = {isa = PBXBuildFile; fileRef = 288FE577AAB36CFD6020F102; };
+		8EA5DECBD1D50A21060FBEE4 /* Momi/Features/Ultrasounds.swift in Sources */ = {isa = PBXBuildFile; fileRef = 240D4D8996FFB80E832F8BC0; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -51,6 +53,8 @@
 		E50BF7328BF674DD82405D65 /* Momi/Services/PDFExport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Momi/Services/PDFExport.swift; sourceTree = "<group>"; };
 		E5A09566449B96BD8BF907F4 /* Momi/Services/DocumentScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Momi/Services/DocumentScanner.swift; sourceTree = "<group>"; };
 		FC4183A304DF214657B58396 /* Momi/Features/Vaccines.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Momi/Features/Vaccines.swift; sourceTree = "<group>"; };
+		288FE577AAB36CFD6020F102 /* Momi/Features/PregnancyJourney.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Momi/Features/PregnancyJourney.swift; sourceTree = "<group>"; };
+		240D4D8996FFB80E832F8BC0 /* Momi/Features/Ultrasounds.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Momi/Features/Ultrasounds.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -68,6 +72,8 @@
 		B28B7AF69320201D1CF206EB = {
 			isa = PBXGroup;
 			children = (
+				240D4D8996FFB80E832F8BC0 /* Momi/Features/Ultrasounds.swift */,
+				288FE577AAB36CFD6020F102 /* Momi/Features/PregnancyJourney.swift */,
 				3013BA0B23BDE052CFE8723B /* Momi/App/AppStore.swift */,
 				B19C9304A8DC2F7EFF1E17C4 /* Momi/App/MomiApp.swift */,
 				6339DB505F3F442AD1C06EE7 /* Momi/Data/Persistence.swift */,
@@ -176,6 +182,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				8EA5DECBD1D50A21060FBEE4 /* Momi/Features/Ultrasounds.swift in Sources */,
+				A81B22B7E782AB365C8302C9 /* Momi/Features/PregnancyJourney.swift in Sources */,
 				E71C53525D614576EDFAF8CF /* Momi/App/AppStore.swift in Sources */,
 				34379CEFE1525B00E637EDD6 /* Momi/App/MomiApp.swift in Sources */,
 				A7B68CDAA3E1CFBBC25459D0 /* Momi/Data/Persistence.swift in Sources */,

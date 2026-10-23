@@ -79,6 +79,7 @@ struct RouteDestination: View {
         case .vaccines: VaccinesView()
         case .cycle: CycleView()
         case .nutrition: NutritionView()
+        case .ultrasounds: UltrasoundsView()
         case .records: RecordsView()
         case .journal: JournalView()
         case .settings: SettingsView()
@@ -91,6 +92,7 @@ struct MotherBookView: View {
             MomiCard {
                 row(.vaccines, "Phiếu tiêm, các mũi đã ghi nhận", "syringe")
                 Divider(); row(.appointments, "Lịch khám và những việc cần nhớ", "calendar")
+                Divider(); row(.ultrasounds, "Lưu ảnh và ghi chú theo tuần thai", "photo.on.rectangle")
                 Divider(); row(.records, "Giấy khám, kết quả, lời dặn", "folder")
                 Divider(); row(.supplements, "Sản phẩm và lịch uống", "pills")
                 Divider(); row(.journal, "Vài dòng dành cho riêng bạn", "square.and.pencil")

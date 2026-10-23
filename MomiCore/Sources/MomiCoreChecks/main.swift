@@ -136,6 +136,193 @@ import MomiCore
         expect(DataExport.csvCell("=1+1") == "\"'=1+1\"")
         expect(DataExport.csvCell("Hai\ndòng") == "\"Hai\ndòng\"")
     }
+    func cycleForecastUsesLatestActualStartAndLocalDates() {
+        var snapshot = Snapshot()
+        var old = DailyHealthLog(day: "2026-09-02"); old.periodStart = true
+        var latest = DailyHealthLog(day: "2026-10-01"); latest.periodStart = true
+        var future = DailyHealthLog(day: "2026-12-01"); future.periodStart = true
+        snapshot.dailyLogs = [old, latest, future]
+        let forecast = CycleEngine.forecast(snapshot, today: "2026-10-23", calendar: calendar)
+        expect(forecast?.lastStart == "2026-10-01")
+        expect(forecast?.nextStart == "2026-10-29")
+        expect(forecast?.ovulation == "2026-10-15")
+        expect(forecast?.fertileStart == "2026-10-10")
+        expect(forecast?.fertileEnd == "2026-10-16")
+        expect(forecast?.periodEnd == "2026-11-02")
+    }
+    func cycleForecastRequiresPeriodAndStopsForPregnancy() {
+        var snapshot = Snapshot()
+        expect(CycleEngine.forecast(snapshot, today: "2026-10-23") == nil)
+        var log = DailyHealthLog(day: "2026-10-01"); log.bleeding = true
+        snapshot.dailyLogs = [log]
+        expect(CycleEngine.forecast(snapshot, today: "2026-10-23") == nil)
+        snapshot.dailyLogs[0].periodStart = true
+        snapshot.profile.stage = .pregnant
+        expect(CycleEngine.forecast(snapshot, today: "2026-10-23") == nil)
+    }
+    func cycleEditsRecomputeWithoutInventingUnrecordedCycles() {
+        var snapshot = Snapshot(); var log = DailyHealthLog(day: "2026-10-01"); log.periodStart = true; snapshot.dailyLogs = [log]
+        snapshot.profile.cycleLength = 30; snapshot.profile.periodLength = 7
+        let forecast = CycleEngine.forecast(snapshot, today: "2026-11-20", calendar: calendar)
+        expect(forecast?.nextStart == "2026-10-31")
+        expect(forecast?.ovulation == "2026-10-17")
+        expect(forecast?.periodEnd == "2026-11-06")
+        expect(snapshot.dailyLogs.count == 1)
+        snapshot.profile.cycleLength = 0
+        expect(CycleEngine.forecast(snapshot, today: "2026-11-20") == nil)
+    }
+    func dashboardIncludesUndatedAndOverdueTasksButSeparatesFuture() {
+        let undated = ChecklistItem(title: "Chưa đặt ngày")
+        var overdue = ChecklistItem(title: "Đến hạn"); overdue.dueDay = "2026-10-22"
+        var today = ChecklistItem(title: "Hôm nay"); today.dueDay = "2026-10-23"
+        var future = ChecklistItem(title: "Tương lai"); future.dueDay = "2026-10-24"
+        var done = ChecklistItem(title: "Xong"); done.status = .done
+        var archived = ChecklistItem(title: "Lưu trữ"); archived.status = .archived
+        let tasks = [undated, overdue, today, future, done, archived]
+        expect(DashboardChecklist.due(tasks, on: "2026-10-23").map(\.id) == [overdue.id, today.id, undated.id])
+        expect(DashboardChecklist.upcoming(tasks, after: "2026-10-23").map(\.id) == [future.id])
+        var changed = tasks; changed[0].status = .done
+        expect(!DashboardChecklist.due(changed, on: "2026-10-23").contains { $0.id == undated.id })
+    }
+    func legacyProfileAndVaccineDecodeWithoutNewFields() throws {
+        let vaccineID = UUID()
+        let data = Data("{\"id\":\"\(vaccineID)\",\"name\":\"Viêm gan B\",\"notes\":\"Cũ\"}".utf8)
+        let vaccine = try JSONDecoder().decode(VaccineRecord.self, from: data)
+        expect(vaccine.id == vaccineID && vaccine.category == nil && vaccine.plannedDoseCount == nil)
+        expect(vaccine.group == .other)
+        guard var object = try JSONSerialization.jsonObject(with: JSONEncoder().encode(Profile())) as? [String: Any] else { throw ValidationError.message("Thiếu profile kiểm thử") }
+        object.removeValue(forKey: "periodLength")
+        let profile = try JSONDecoder().decode(Profile.self, from: JSONSerialization.data(withJSONObject: object))
+        expect(profile.periodLength == nil)
+    }
+    func vaccineDeletionCancelsRemindersAndKeepsSharedFilesAndHistory() throws {
+        var snapshot = Snapshot()
+        let vaccine = VaccineRecord(name: "Viêm gan B"), other = VaccineRecord(name: "Cúm")
+        snapshot.vaccines = [vaccine, other]
+        let shared = Attachment(filename: "shared.jpg", displayName: "Dùng chung"), unique = Attachment(filename: "only.jpg", displayName: "Riêng")
+        snapshot.attachments = [shared, unique]
+        var dose = VaccinationDose(vaccineID: vaccine.id, day: "2026-10-01"); dose.attachmentIDs = [shared.id, unique.id]
+        snapshot.vaccinations = [dose, VaccinationDose(vaccineID: other.id, day: "2026-10-02")]
+        var record = HealthRecord(title: "Khám", day: "2026-10-01"); record.attachmentIDs = [shared.id]; snapshot.records = [record]
+        var pending = Appointment(title: "Mũi sau", date: date("2026-10-24")); pending.kind = .vaccination; pending.vaccineID = vaccine.id; pending.reminderMinutes = [0]
+        var completed = Appointment(title: "Mũi trước", date: date("2026-10-01")); completed.vaccineID = vaccine.id; completed.status = .completed
+        snapshot.appointments = [pending, completed]
+        var task = ChecklistItem(title: "Đi tiêm"); task.appointmentID = pending.id; task.reminder = pending.date; snapshot.tasks = [task]
+        VaccineManagement.removeVaccine(vaccine.id, from: &snapshot)
+        expect(snapshot.vaccines.map(\.id) == [other.id])
+        expect(snapshot.vaccinations.count == 1 && snapshot.vaccinations[0].vaccineID == other.id)
+        expect(snapshot.appointments[0].status == .cancelled && snapshot.appointments[0].vaccineID == nil)
+        expect(snapshot.appointments[1].status == .completed && snapshot.appointments[1].vaccineID == nil)
+        expect(snapshot.tasks[0].status == .archived && snapshot.tasks[0].reminder == nil)
+        expect(snapshot.attachments.map(\.id) == [shared.id])
+        expect(ReminderPlanner.make(snapshot: snapshot, now: date("2026-10-23"), calendar: calendar).requests.isEmpty)
+        try BackupPayload(snapshot: snapshot, files: [shared.filename: Data()]).validate()
+    }
+    func deletingOneDoseKeepsOtherDosesAndProfile() {
+        var snapshot = Snapshot(); let vaccine = VaccineRecord(name: "HPV"); snapshot.vaccines = [vaccine]
+        let first = VaccinationDose(vaccineID: vaccine.id, day: "2026-01-01"), second = VaccinationDose(vaccineID: vaccine.id, day: "2026-03-01")
+        snapshot.vaccinations = [first, second]
+        VaccineManagement.removeDose(first.id, from: &snapshot)
+        expect(snapshot.vaccines == [vaccine])
+        expect(snapshot.vaccinations == [second])
+    }
+    func cycleAndVaccinePlanSurviveEncryptedBackup() throws {
+        var snapshot = Snapshot(); snapshot.profile.cycleLength = 31; snapshot.profile.periodLength = 6
+        var vaccine = VaccineRecord(name: "Hồ sơ B"); vaccine.category = .hepatitisB; vaccine.plannedDoseCount = 3; snapshot.vaccines = [vaccine]
+        let payload = BackupPayload(snapshot: snapshot, files: [:])
+        let restored = try BackupCipher.decrypt(BackupCipher.encrypt(payload, password: "test-cycle-vaccine"), password: "test-cycle-vaccine")
+        expect(restored.snapshot == snapshot)
+        snapshot.profile.periodLength = 0
+        expectThrows( ValidationError.self) { try BackupPayload(snapshot: snapshot, files: [:]).validate() }
+    }
+    func pregnancyAgeTracksWeekAndLocalDay() {
+        let age = PregnancyTimeline.age(dueDate: "2027-06-18", on: "2026-10-23", calendar: calendar)
+        expect(age?.week == 6 && age?.remainder == 0)
+        let tomorrow = PregnancyTimeline.age(dueDate: "2027-06-18", on: "2026-10-24", calendar: calendar)
+        expect(tomorrow?.week == 6 && tomorrow?.remainder == 1)
+        expect(PregnancyTimeline.age(dueDate: "2027-06-18", on: "2026-10-30", calendar: calendar)?.week == 7)
+        expect(PregnancyTimeline.age(dueDate: "2027-06-18", on: "2027-06-18", calendar: calendar)?.week == 40)
+        expect(PregnancyTimeline.age(dueDate: nil, on: "2026-10-23") == nil)
+        expect(PregnancyTimeline.age(dueDate: "2027-06-18", on: "2026-01-01", calendar: calendar) == nil)
+    }
+    func ultrasoundWeekStaysFixedWhenDueDateChanges() throws {
+        var snapshot = Snapshot()
+        let file = Attachment(filename: "scan.jpg", displayName: "Tuần 6")
+        var entry = UltrasoundEntry(week: 6, day: "2026-10-23"); entry.attachmentIDs = [file.id]
+        try PregnancyTimeline.save(entry, files: [file], in: &snapshot)
+        snapshot.profile.dueDate = "2027-07-01"
+        expect(PregnancyTimeline.entries(snapshot, week: 6) == [entry])
+        expect(PregnancyTimeline.entries(snapshot, week: 7).isEmpty)
+        entry.week = 7
+        try PregnancyTimeline.save(entry, files: [], in: &snapshot)
+        expect(PregnancyTimeline.entries(snapshot, week: 6).isEmpty)
+        expect(PregnancyTimeline.entries(snapshot, week: 7) == [entry])
+        expect(snapshot.ultrasounds.count == 1 && snapshot.attachments.count == 1)
+    }
+    func ultrasoundBackupKeepsImageBytesAndLegacyBackupHasEmptyAlbum() throws {
+        var snapshot = Snapshot(); let file = Attachment(filename: "scan.png", displayName: "Siêu âm")
+        var entry = UltrasoundEntry(week: 12, day: "2026-10-23"); entry.notes = "Một kỷ niệm"; entry.attachmentIDs = [file.id]
+        try PregnancyTimeline.save(entry, files: [file], in: &snapshot)
+        let bytes = Data([1, 5, 7, 255])
+        let restored = try BackupCipher.decrypt(BackupCipher.encrypt(BackupPayload(snapshot: snapshot, files: [file.filename: bytes]), password: "ultrasound-backup"), password: "ultrasound-backup")
+        expect(restored.snapshot == snapshot)
+        expect(restored.files[file.filename] == bytes)
+        guard var object = try JSONSerialization.jsonObject(with: JSONEncoder().encode(Snapshot())) as? [String: Any] else { throw ValidationError.message("Thiếu dữ liệu kiểm thử") }
+        object.removeValue(forKey: "ultrasounds")
+        let legacy = try JSONDecoder().decode(Snapshot.self, from: JSONSerialization.data(withJSONObject: object))
+        expect(legacy.ultrasounds.isEmpty)
+    }
+    func ultrasoundRejectsMissingImagesAndInvalidWeekBeforeMutation() {
+        var snapshot = Snapshot(); var entry = UltrasoundEntry(week: 6, day: "2026-10-23")
+        expectThrows( ValidationError.self) { try PregnancyTimeline.save(entry, files: [], in: &snapshot) }
+        entry.attachmentIDs = [UUID()]
+        expectThrows( ValidationError.self) { try PregnancyTimeline.save(entry, files: [], in: &snapshot) }
+        entry.week = 43
+        expectThrows( ValidationError.self) { try PregnancyTimeline.save(entry, files: [], in: &snapshot) }
+        expect(snapshot == Snapshot())
+    }
+    func ultrasoundDeletionKeepsSharedImagesAndOtherWeeks() throws {
+        var snapshot = Snapshot()
+        let shared = Attachment(filename: "shared.jpg", displayName: "Chung"), unique = Attachment(filename: "unique.jpg", displayName: "Riêng")
+        var first = UltrasoundEntry(week: 6, day: "2026-10-23"); first.attachmentIDs = [shared.id, unique.id]
+        var second = UltrasoundEntry(week: 7, day: "2026-10-30"); second.attachmentIDs = [shared.id]
+        try PregnancyTimeline.save(first, files: [shared, unique], in: &snapshot)
+        try PregnancyTimeline.save(second, files: [], in: &snapshot)
+        PregnancyTimeline.remove(first.id, from: &snapshot)
+        expect(snapshot.ultrasounds == [second])
+        expect(snapshot.attachments == [shared])
+        try BackupPayload(snapshot: snapshot, files: [shared.filename: Data()]).validate()
+    }
+    func vaccineDeletionCannotRemoveUltrasoundSharedAttachment() throws {
+        var snapshot = Snapshot(); let shared = Attachment(filename: "shared.jpg", displayName: "Ảnh")
+        var entry = UltrasoundEntry(week: 6, day: "2026-10-23"); entry.attachmentIDs = [shared.id]
+        try PregnancyTimeline.save(entry, files: [shared], in: &snapshot)
+        let vaccine = VaccineRecord(name: "A"); snapshot.vaccines = [vaccine]
+        var dose = VaccinationDose(vaccineID: vaccine.id, day: "2026-10-23"); dose.attachmentIDs = [shared.id]; snapshot.vaccinations = [dose]
+        VaccineManagement.removeVaccine(vaccine.id, from: &snapshot)
+        expect(snapshot.attachments == [shared] && snapshot.ultrasounds == [entry])
+        try BackupPayload(snapshot: snapshot, files: [shared.filename: Data()]).validate()
+    }
+    func pregnancyChecklistFiltersStageAndCompletion() {
+        var snapshot = Snapshot()
+        let shared = ChecklistItem(title: "Chung")
+        var prep = ChecklistItem(title: "Trước thai kỳ"); prep.stage = .preparation
+        var pregnant = ChecklistItem(title: "Thai kỳ"); pregnant.stage = .pregnant
+        var done = pregnant; done.id = UUID(); done.status = .done
+        snapshot.tasks = [prep, pregnant, shared, done]
+        expect(Set(PregnancyTimeline.checklist(snapshot).map(\.id)) == Set([shared.id, pregnant.id]))
+    }
+    func editingUltrasoundRemovesOnlyUnreferencedOldPhotos() throws {
+        var snapshot = Snapshot()
+        let old = Attachment(filename: "old.jpg", displayName: "Cũ"), replacement = Attachment(filename: "new.jpg", displayName: "Mới")
+        var entry = UltrasoundEntry(week: 6, day: "2026-10-23"); entry.attachmentIDs = [old.id]
+        try PregnancyTimeline.save(entry, files: [old], in: &snapshot)
+        entry.attachmentIDs = [replacement.id]
+        try PregnancyTimeline.save(entry, files: [replacement], in: &snapshot)
+        expect(snapshot.attachments == [replacement])
+        expect(snapshot.ultrasounds == [entry])
+        try BackupPayload(snapshot: snapshot, files: [replacement.filename: Data()]).validate()
+    }
 }
 
 @MainActor enum Harness { static var count = 0 }
@@ -183,6 +370,38 @@ import MomiCore
         print("PASS backupRejectsInvalidSchedule")
         tests.csvEscapesQuotesAndFormulaInjection()
         print("PASS csvEscapesQuotesAndFormulaInjection")
+        tests.cycleForecastUsesLatestActualStartAndLocalDates()
+        print("PASS cycleForecastUsesLatestActualStartAndLocalDates")
+        tests.cycleForecastRequiresPeriodAndStopsForPregnancy()
+        print("PASS cycleForecastRequiresPeriodAndStopsForPregnancy")
+        tests.cycleEditsRecomputeWithoutInventingUnrecordedCycles()
+        print("PASS cycleEditsRecomputeWithoutInventingUnrecordedCycles")
+        tests.dashboardIncludesUndatedAndOverdueTasksButSeparatesFuture()
+        print("PASS dashboardIncludesUndatedAndOverdueTasksButSeparatesFuture")
+        try tests.legacyProfileAndVaccineDecodeWithoutNewFields()
+        print("PASS legacyProfileAndVaccineDecodeWithoutNewFields")
+        try tests.vaccineDeletionCancelsRemindersAndKeepsSharedFilesAndHistory()
+        print("PASS vaccineDeletionCancelsRemindersAndKeepsSharedFilesAndHistory")
+        tests.deletingOneDoseKeepsOtherDosesAndProfile()
+        print("PASS deletingOneDoseKeepsOtherDosesAndProfile")
+        try tests.cycleAndVaccinePlanSurviveEncryptedBackup()
+        print("PASS cycleAndVaccinePlanSurviveEncryptedBackup")
+        tests.pregnancyAgeTracksWeekAndLocalDay()
+        print("PASS pregnancyAgeTracksWeekAndLocalDay")
+        try tests.ultrasoundWeekStaysFixedWhenDueDateChanges()
+        print("PASS ultrasoundWeekStaysFixedWhenDueDateChanges")
+        try tests.ultrasoundBackupKeepsImageBytesAndLegacyBackupHasEmptyAlbum()
+        print("PASS ultrasoundBackupKeepsImageBytesAndLegacyBackupHasEmptyAlbum")
+        tests.ultrasoundRejectsMissingImagesAndInvalidWeekBeforeMutation()
+        print("PASS ultrasoundRejectsMissingImagesAndInvalidWeekBeforeMutation")
+        try tests.ultrasoundDeletionKeepsSharedImagesAndOtherWeeks()
+        print("PASS ultrasoundDeletionKeepsSharedImagesAndOtherWeeks")
+        try tests.vaccineDeletionCannotRemoveUltrasoundSharedAttachment()
+        print("PASS vaccineDeletionCannotRemoveUltrasoundSharedAttachment")
+        tests.pregnancyChecklistFiltersStageAndCompletion()
+        print("PASS pregnancyChecklistFiltersStageAndCompletion")
+        try tests.editingUltrasoundRemovesOnlyUnreferencedOldPhotos()
+        print("PASS editingUltrasoundRemovesOnlyUnreferencedOldPhotos")
         print("Passed \(Harness.count) assertions.")
     }
 }

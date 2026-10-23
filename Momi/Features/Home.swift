@@ -18,7 +18,10 @@ struct OnboardingView: View {
                     TextField("Tên của bạn", text: $name).textFieldStyle(.roundedBorder)
                     Picker("Giai đoạn", selection: $stage) { ForEach(Stage.allCases, id: \.self) { Text($0.title).tag($0) } }
                     Toggle(stage == .pregnant ? "Đã biết ngày dự sinh" : "Ghi ngày bắt đầu kỳ kinh gần nhất", isOn: $hasDate)
-                    if hasDate { DatePicker(stage == .pregnant ? "Ngày dự sinh" : "Ngày bắt đầu", selection: $date, displayedComponents: .date) }
+                    if hasDate {
+                        if stage == .pregnant { DatePicker("Ngày dự sinh", selection: $date, displayedComponents: .date) }
+                        else { DatePicker("Ngày bắt đầu kỳ kinh", selection: $date, in: ...Date(), displayedComponents: .date) }
+                    }
                 }
                 Label("Không cần tài khoản. Thông tin chưa biết có thể thêm sau.", systemImage: "lock").font(.footnote).foregroundStyle(MomiTheme.muted)
                 PrimaryButton(title: "Bắt đầu cùng Momi") {
@@ -26,7 +29,7 @@ struct OnboardingView: View {
                         s.profile.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
                         s.profile.stage = stage; s.profile.onboarded = true
                         if hasDate && stage == .pregnant { s.profile.dueDate = Day.key(date) }
-                        if hasDate && stage == .preparation { var log = DailyHealthLog(day: Day.key(date)); log.bleeding = true; log.periodStart = true; s.dailyLogs.append(log) }
+                        if hasDate && stage == .preparation { var log = DailyHealthLog(day: Day.key(min(date, Date()))); log.bleeding = true; log.periodStart = true; s.dailyLogs.append(log) }
                     }
                 }
             }
@@ -38,12 +41,16 @@ struct TodayView: View {
     @Environment(AppStore.self) private var store
     @State private var quickLog = false
     var upcoming: [Appointment] { store.snapshot.appointments.filter { $0.status == .scheduled && $0.date >= Date() }.sorted { $0.date < $1.date } }
-    var tasks: [ChecklistItem] { store.snapshot.tasks.filter { $0.status == .todo && $0.dueDay.map { $0 <= store.today } == true } }
+    var tasks: [ChecklistItem] { DashboardChecklist.due(store.snapshot.tasks, on: store.today) }
+    var futureTasks: [ChecklistItem] { DashboardChecklist.upcoming(store.snapshot.tasks, after: store.today) }
     var body: some View {
         MomiPage {
             Text(Date().formatted(.dateTime.weekday(.wide).day().month().locale(Locale(identifier: "vi_VN")))).font(.subheadline).foregroundStyle(MomiTheme.muted)
             Text("Chào \(store.snapshot.profile.name.isEmpty ? "bạn" : store.snapshot.profile.name)").font(.largeTitle.bold())
             Label(store.snapshot.profile.stage.title, systemImage: "leaf").font(.subheadline).foregroundStyle(MomiTheme.green)
+            if store.snapshot.profile.stage == .preparation {
+                NavigationLink { CycleView() } label: { CycleSummaryCard() }.buttonStyle(.plain)
+            }
             SectionHeading(title: "Sắp tới")
             if let a = upcoming.first {
                 NavigationLink { AppointmentDetail(id: a.id) } label: {
@@ -59,9 +66,15 @@ struct TodayView: View {
             DailyIntakeSection(day: store.today)
             SectionHeading(title: "Việc hôm nay")
             MomiCard {
-                if tasks.isEmpty { Text("Chưa có việc đến hạn. Bạn có thể thêm khi cần.").foregroundStyle(MomiTheme.muted) }
-                ForEach(Array(tasks.prefix(3))) { item in TaskCheckRow(item: item) }
-                NavigationLink("Xem checklist") { ChecklistView() }
+                if tasks.isEmpty { Text("Chưa có việc đến hạn hoặc chưa đặt ngày.").foregroundStyle(MomiTheme.muted) }
+                ForEach(Array(tasks.prefix(5))) { item in TaskCheckRow(item: item) }
+                if tasks.count > 5 { Text("Còn \(tasks.count - 5) việc trong checklist").font(.caption).foregroundStyle(MomiTheme.muted) }
+                if !futureTasks.isEmpty {
+                    Divider()
+                    Text("Việc sắp tới").font(.subheadline.bold())
+                    ForEach(Array(futureTasks.prefix(2))) { item in TaskCheckRow(item: item) }
+                }
+                NavigationLink("Xem checklist (\(tasks.count + futureTasks.count) việc cần làm)") { ChecklistView() }
             }
             Button { quickLog = true } label: { RouteRow(title: "Hôm nay bạn thế nào?", subtitle: "Ghi vài điều, hoặc để sau", icon: "heart") }.buttonStyle(.plain)
             if let article = ContentLibrary.articles.first {
@@ -77,25 +90,20 @@ struct JourneyView: View {
     @State private var changeStage = false
     var body: some View {
         MomiPage {
-            MomiCard {
-                Label(store.snapshot.profile.stage.title, systemImage: "leaf").font(.title2.bold()).foregroundStyle(MomiTheme.green)
-                if store.snapshot.profile.stage == .pregnant {
-                    if let key = store.snapshot.profile.dueDate, let date = Day.date(key) {
-                        let days = Calendar.current.dateComponents([.day], from: Calendar.current.startOfDay(for: Date()), to: Calendar.current.startOfDay(for: date)).day ?? 0
-                        let age = 280 - days
-                        if age >= 0 && age <= 301 { Text("Khoảng \(age / 7) tuần \(age % 7) ngày").font(.title.bold()) }
-                        Text("Dự sinh: " + Day.display(key)).foregroundStyle(MomiTheme.muted)
-                        Text("Tính theo ngày dự sinh bạn nhập; cập nhật theo thông tin bác sĩ.").font(.footnote)
-                    } else { Text("Bạn có thể bổ sung ngày dự sinh sau.") }
-                } else { Text("Mỗi bước nhỏ giúp bạn chủ động hơn.").foregroundStyle(MomiTheme.muted) }
-                Button("Cập nhật giai đoạn") { changeStage = true }
-            }
-            MomiCard {
-                NavigationLink { ChecklistView() } label: { RouteRow(title: "Checklist của mẹ", subtitle: "Việc cần chuẩn bị, theo nhịp của bạn", icon: "checklist") }.buttonStyle(.plain)
-                Divider()
-                NavigationLink { NutritionView() } label: { RouteRow(title: "Dinh dưỡng & bổ sung", subtitle: "Món ăn, sản phẩm và lịch uống", icon: "carrot") }.buttonStyle(.plain)
-                Divider()
-                NavigationLink { CycleView() } label: { RouteRow(title: "Chu kỳ & cảm nhận", subtitle: "Xem lại những gì đã ghi", icon: "drop") }.buttonStyle(.plain)
+            if store.snapshot.profile.stage == .pregnant { PregnancyJourneyView(changeStage: $changeStage) }
+            else {
+                MomiCard {
+                    Label(store.snapshot.profile.stage.title, systemImage: "leaf").font(.title2.bold()).foregroundStyle(MomiTheme.green)
+                    Text("Mỗi bước nhỏ giúp bạn chủ động hơn.").foregroundStyle(MomiTheme.muted)
+                    Button("Cập nhật giai đoạn") { changeStage = true }
+                }
+                MomiCard {
+                    NavigationLink { ChecklistView() } label: { RouteRow(title: "Checklist của mẹ", subtitle: "Việc cần chuẩn bị, theo nhịp của bạn", icon: "checklist") }.buttonStyle(.plain)
+                    Divider()
+                    NavigationLink { NutritionView() } label: { RouteRow(title: "Dinh dưỡng & bổ sung", subtitle: "Món ăn, sản phẩm và lịch uống", icon: "carrot") }.buttonStyle(.plain)
+                    Divider()
+                    NavigationLink { CycleView() } label: { RouteRow(title: "Lịch kinh & rụng trứng", subtitle: "Ghi kỳ kinh, chỉnh chu kỳ và xem dự báo", icon: "calendar") }.buttonStyle(.plain)
+                }
             }
             if !store.snapshot.profile.stageHistory.isEmpty {
                 SectionHeading(title: "Các mốc đã ghi")

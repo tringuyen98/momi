@@ -11,75 +11,152 @@ struct VaccinesView: View {
     @Environment(AppStore.self) private var store
     @State private var importing = false
     @State private var manual = false
-    @State private var addingName = false
-    @State private var name = ""
+    @State private var adding = false
+    @State private var category: VaccineCategory?
+    private var records: [VaccineRecord] { store.snapshot.vaccines.filter { category == nil || $0.group == category }.sorted { $0.name < $1.name } }
     var body: some View {
         MomiPage {
             MomiCard {
                 Text("Giữ lại lịch sử tiêm của bạn").font(.title3.bold())
-                Text("Chụp phiếu tiêm, kiểm tra thông tin và lưu lịch hẹn đã được xác nhận.").foregroundStyle(MomiTheme.muted)
+                Text("Mỗi hồ sơ vaccine gồm nhiều mũi tiêm và lịch hẹn. Nhóm theo loại để dễ theo dõi.").foregroundStyle(MomiTheme.muted)
                 PrimaryButton(title: "Chụp / tải phiếu tiêm") { importing = true }
                 Button("Nhập mũi đã tiêm bằng tay") { manual = true }
-                Button("Thêm vaccine cần trao đổi") { addingName = true }
+                Button("Thêm hồ sơ vaccine") { adding = true }
             }
-            ForEach(store.snapshot.vaccines) { vaccine in
-                NavigationLink { VaccineDetail(id: vaccine.id) } label: {
-                    MomiCard {
-                        Label(vaccine.name, systemImage: "syringe").font(.headline)
-                        let count = store.snapshot.vaccinations.filter { $0.vaccineID == vaccine.id }.count
-                        Text(count == 0 ? "Chưa có mũi tiêm được ghi nhận" : "\(count) mũi đã ghi nhận").font(.subheadline).foregroundStyle(MomiTheme.muted)
-                        if let next = store.snapshot.appointments.filter({ $0.vaccineID == vaccine.id && $0.status == .scheduled }).sorted(by: { $0.date < $1.date }).first { Text("Lịch hẹn: " + next.date.momiDate).font(.caption).foregroundStyle(MomiTheme.green) }
+            Picker("Lọc nhóm vaccine", selection: $category) {
+                Text("Tất cả nhóm").tag(Optional<VaccineCategory>.none)
+                ForEach(VaccineCategory.allCases, id: \.self) { Text($0.title).tag(Optional($0)) }
+            }
+            if records.isEmpty { EmptyNote(title: "Chưa có vaccine trong nhóm này", message: "Thêm hồ sơ hoặc sửa nhóm cho vaccine đã lưu.", symbol: "syringe") }
+            ForEach(VaccineCategory.allCases, id: \.self) { group in
+                let vaccines = records.filter { $0.group == group }
+                if !vaccines.isEmpty {
+                    SectionHeading(title: group.title)
+                    ForEach(vaccines) { vaccine in
+                        NavigationLink { VaccineDetail(id: vaccine.id) } label: {
+                            MomiCard {
+                                Label(vaccine.name, systemImage: "syringe").font(.headline)
+                                let count = store.snapshot.vaccinations.filter { $0.vaccineID == vaccine.id }.count
+                                Text("\(count) mũi đã ghi nhận" + (vaccine.plannedDoseCount.map { " · kế hoạch \($0) mũi" } ?? "")).font(.subheadline).foregroundStyle(MomiTheme.muted)
+                                if let next = store.snapshot.appointments.filter({ $0.vaccineID == vaccine.id && $0.status == .scheduled }).sorted(by: { $0.date < $1.date }).first { Text("Lịch hẹn: " + next.date.momiDate).font(.caption).foregroundStyle(MomiTheme.green) }
+                            }
+                        }.buttonStyle(.plain)
                     }
-                }.buttonStyle(.plain)
+                }
             }
         }.navigationTitle("Vaccine")
             .sheet(isPresented: $importing) { NavigationStack { VaccineImportView() } }
             .sheet(isPresented: $manual) { NavigationStack { VaccinationEditor() } }
-            .alert("Vaccine cần trao đổi", isPresented: $addingName) { TextField("Tên vaccine", text: $name); Button("Hủy", role: .cancel) {}; Button("Thêm") { let trimmed = name.trimmingCharacters(in: .whitespaces); if !trimmed.isEmpty { _ = store.commit { $0.vaccines.append(VaccineRecord(name: trimmed)) }; name = "" } } }
+            .sheet(isPresented: $adding) { NavigationStack { VaccineProfileEditor(record: VaccineRecord(name: "")) } }
     }
 }
+
+struct VaccineProfileEditor: View {
+    @Environment(AppStore.self) private var store
+    @Environment(\.dismiss) private var dismiss
+    @State var record: VaccineRecord
+    @State private var category: VaccineCategory = .other
+    @State private var hasPlan = false
+    @State private var total = 3
+    @State private var validation: String?
+    var body: some View {
+        Form {
+            Section("Hồ sơ vaccine") {
+                TextField("Tên hồ sơ · ví dụ Viêm gan B", text: $record.name)
+                Picker("Nhóm", selection: $category) { ForEach(VaccineCategory.allCases, id: \.self) { Text($0.title).tag($0) } }
+                TextField("Ghi chú", text: $record.notes, axis: .vertical).lineLimit(2...5)
+            }
+            Section("Số mũi theo kế hoạch đã xác nhận") {
+                Toggle("Đã biết số mũi", isOn: $hasPlan)
+                if hasPlan { Stepper("Kế hoạch: \(total) mũi", value: $total, in: 1...20) }
+                Text("Nhập theo phiếu tiêm hoặc tư vấn của cơ sở tiêm. Momi không tự đặt phác đồ theo nhóm vaccine.").font(.footnote)
+            }
+            if let validation { Text(validation).foregroundStyle(.red) }
+        }.momiForm().navigationTitle("Hồ sơ vaccine")
+            .onAppear { category = record.group; hasPlan = record.plannedDoseCount != nil; total = min(20, max(1, record.plannedDoseCount ?? 3)) }
+            .editorToolbar(save: {
+                let name = record.name.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !name.isEmpty else { validation = "Hãy nhập tên hồ sơ."; return }
+                guard !store.snapshot.vaccines.contains(where: { $0.id != record.id && $0.name.localizedCaseInsensitiveCompare(name) == .orderedSame }) else { validation = "Đã có hồ sơ cùng tên. Hãy thêm mũi vào hồ sơ đó hoặc chọn tên khác."; return }
+                record.name = name; record.category = category; record.plannedDoseCount = hasPlan ? total : nil
+                if store.commit({ s in s.vaccines.removeAll { $0.id == record.id }; s.vaccines.append(record) }) { dismiss() }
+            }, cancel: { dismiss() })
+    }
+}
+
 struct VaccineDetail: View {
     @Environment(AppStore.self) private var store
+    @Environment(\.dismiss) private var dismiss
     var id: UUID
     @State private var adding = false
     @State private var appointment = false
-    @State private var preview: URL?
     @State private var editingDose: VaccinationDose?
-    @State private var editingName = false
-    @State private var name = ""
+    @State private var editing = false
+    @State private var deleting = false
+    @State private var deletingDose: VaccinationDose?
+    private var doses: [VaccinationDose] {
+        store.snapshot.vaccinations.filter { $0.vaccineID == id }.sorted { ($0.number ?? Int.max, $0.day) < ($1.number ?? Int.max, $1.day) }
+    }
     var body: some View {
         if let vaccine = store.snapshot.vaccines.first(where: { $0.id == id }) {
             MomiPage {
-                MomiCard { Text(vaccine.name).font(.title2.bold()); Text(vaccine.notes); Button("Ghi nhận mũi đã tiêm") { adding = true }; Button("Thêm lịch hẹn đã xác nhận") { appointment = true } }
-                ForEach(store.snapshot.appointments.filter { $0.vaccineID == id && $0.status == .scheduled }) { a in
+                MomiCard {
+                    Text(vaccine.name).font(.title2.bold())
+                    Text(vaccine.group.title).font(.subheadline).foregroundStyle(MomiTheme.green)
+                    Text("\(doses.count) mũi đã ghi nhận" + (vaccine.plannedDoseCount.map { " · kế hoạch \($0) mũi" } ?? "")).font(.headline)
+                    if let total = vaccine.plannedDoseCount { ProgressView(value: Double(min(doses.count, total)), total: Double(total)) }
+                    if !vaccine.notes.isEmpty { Text(vaccine.notes) }
+                    Button("Ghi nhận mũi đã tiêm") { adding = true }
+                    Button("Thêm lịch hẹn đã xác nhận") { appointment = true }
+                    Button("Sửa nhóm & số mũi theo kế hoạch") { editing = true }
+                }
+                ForEach(store.snapshot.appointments.filter { $0.vaccineID == id && $0.status == .scheduled }.sorted { $0.date < $1.date }) { a in
                     NavigationLink { AppointmentDetail(id: a.id) } label: { MomiCard { Text(a.title).font(.headline); Text(a.date.momiDate + " · " + a.date.momiTime) } }.buttonStyle(.plain)
                 }
                 SectionHeading(title: "Các mũi đã ghi nhận")
-                ForEach(store.snapshot.vaccinations.filter { $0.vaccineID == id }.sorted { $0.day > $1.day }) { dose in
+                if doses.isEmpty { Text("Chưa có mũi tiêm. Bạn có thể thêm từng mũi vào hồ sơ này.").foregroundStyle(MomiTheme.muted) }
+                ForEach(doses) { dose in
                     MomiCard {
                         HStack { Text(dose.number.map { "Mũi \($0)" } ?? "Chưa ghi số mũi").font(.headline); Spacer(); Button("Sửa") { editingDose = dose } }
                         Text(Day.display(dose.day)); if !dose.place.isEmpty { Text(dose.place) }
                         if !dose.product.isEmpty { Text(dose.product) }; if !dose.lot.isEmpty { Text("Số lô: " + dose.lot).font(.caption) }
                         if !dose.notes.isEmpty { Text(dose.notes).font(.subheadline) }
                         AttachmentLinks(ids: dose.attachmentIDs)
+                        Button("Xóa mũi tiêm", role: .destructive) { deletingDose = dose }
                     }
                 }
+                Button("Xóa hồ sơ vaccine", role: .destructive) { deleting = true }
             }.navigationTitle("Hồ sơ vaccine")
-                .toolbar { Button("Đổi tên") { name = vaccine.name; editingName = true } }
-                .alert("Tên vaccine", isPresented: $editingName) { TextField("Tên", text: $name); Button("Hủy", role: .cancel) {}; Button("Lưu") { if !name.trimmingCharacters(in: .whitespaces).isEmpty { _ = store.commit { s in if let i = s.vaccines.firstIndex(where: { $0.id == id }) { s.vaccines[i].name = name } } } } }
+                .toolbar { Button("Sửa hồ sơ") { editing = true } }
+                .sheet(isPresented: $editing) { NavigationStack { VaccineProfileEditor(record: vaccine) } }
                 .sheet(isPresented: $adding) { NavigationStack { VaccinationEditor(vaccineID: id) } }
                 .sheet(item: $editingDose) { dose in NavigationStack { VaccinationEditor(vaccineID: id, existing: dose) } }
                 .sheet(isPresented: $appointment) { NavigationStack { AppointmentEditor(appointment: { var a = Appointment(title: "Tiêm " + vaccine.name, date: Date().addingTimeInterval(86400)); a.kind = .vaccination; a.vaccineID = id; return a }()) } }
+                .alert("Xóa hồ sơ \(vaccine.name)?", isPresented: $deleting) {
+                    Button("Hủy", role: .cancel) {}
+                    Button("Xóa hồ sơ", role: .destructive) {
+                        if store.commit({ VaccineManagement.removeVaccine(id, from: &$0) }) { store.files.cleanup(keeping: store.snapshot); dismiss() }
+                    }
+                } message: { Text("Xóa hồ sơ và \(doses.count) mũi tiêm. Lịch hẹn tiêm còn hiệu lực sẽ bị hủy cùng lời nhắc; lịch sử hẹn được giữ lại. Ảnh dùng chung với hồ sơ khác vẫn được giữ.") }
+                .alert("Xóa mũi tiêm này?", isPresented: Binding(get: { deletingDose != nil }, set: { if !$0 { deletingDose = nil } }), presenting: deletingDose) { dose in
+                    Button("Hủy", role: .cancel) { deletingDose = nil }
+                    Button("Xóa mũi tiêm", role: .destructive) {
+                        if store.commit({ VaccineManagement.removeDose(dose.id, from: &$0) }) { store.files.cleanup(keeping: store.snapshot); deletingDose = nil }
+                    }
+                } message: { _ in Text("Xóa bản ghi và ảnh không còn được dùng ở nơi khác. Hồ sơ vaccine, các mũi khác và lịch sử hẹn được giữ lại.") }
         } else { EmptyNote(title: "Chưa có hồ sơ") }
     }
 }
+
 struct VaccinationEditor: View {
     @Environment(AppStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     var vaccineID: UUID? = nil
     var appointmentID: UUID? = nil
     var existing: VaccinationDose? = nil
+    @State private var selectedVaccineID: UUID?
     @State private var name = ""
+    @State private var category: VaccineCategory = .other
     @State private var day = Date()
     @State private var number = ""
     @State private var place = ""
@@ -90,30 +167,44 @@ struct VaccinationEditor: View {
     @State private var validation: String?
     var body: some View {
         Form {
-            TextField("Tên vaccine", text: $name)
-            DatePicker("Ngày đã tiêm", selection: $day, in: ...Date(), displayedComponents: .date)
-            TextField("Mũi thứ — bỏ trống nếu chưa rõ", text: $number)
-            TextField("Cơ sở tiêm", text: $place)
-            TextField("Tên sản phẩm", text: $product)
-            TextField("Số lô", text: $lot)
-            TextField("Ghi chú", text: $notes, axis: .vertical).lineLimit(2...5)
+            Section("Thuộc hồ sơ vaccine") {
+                Picker("Hồ sơ", selection: $selectedVaccineID) {
+                    Text("Tạo hồ sơ mới").tag(Optional<UUID>.none)
+                    ForEach(store.snapshot.vaccines.sorted { $0.name < $1.name }) { Text($0.name + " · " + $0.group.title).tag(Optional($0.id)) }
+                }.disabled(existing != nil || vaccineID != nil)
+                if selectedVaccineID == nil {
+                    TextField("Tên hồ sơ vaccine", text: $name)
+                    Picker("Nhóm", selection: $category) { ForEach(VaccineCategory.allCases, id: \.self) { Text($0.title).tag($0) } }
+                }
+            }
+            Section("Mũi đã tiêm") {
+                DatePicker("Ngày đã tiêm", selection: $day, in: ...Date(), displayedComponents: .date)
+                TextField("Mũi thứ — bỏ trống nếu chưa rõ", text: $number)
+                TextField("Cơ sở tiêm", text: $place)
+                TextField("Tên sản phẩm", text: $product)
+                TextField("Số lô", text: $lot)
+                TextField("Ghi chú", text: $notes, axis: .vertical).lineLimit(2...5)
+            }
             Section("Ảnh / PDF phiếu tiêm") { AttachmentPicker(files: $files) }
             if let validation { Text(validation).foregroundStyle(.red) }
         }.momiForm().navigationTitle(existing == nil ? "Mũi đã tiêm" : "Sửa mũi tiêm")
             .onAppear {
-                name = store.snapshot.vaccines.first { $0.id == vaccineID }?.name ?? ""
+                selectedVaccineID = existing?.vaccineID ?? vaccineID
                 if let a = store.snapshot.appointments.first(where: { $0.id == appointmentID }) { place = a.place }
                 if let e = existing { day = Day.date(e.day) ?? Date(); number = e.number.map(String.init) ?? ""; place = e.place; product = e.product; lot = e.lot; notes = e.notes; files = store.snapshot.attachments.filter { e.attachmentIDs.contains($0.id) } }
             }
             .editorToolbar(save: save, cancel: { dismiss() })
     }
     private func save() {
-        let trimmed = name.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty else { validation = "Hãy nhập tên vaccine."; return }
-        guard number.isEmpty || (Int(number).map { $0 > 0 } ?? false) else { validation = "Số mũi cần là số dương hoặc để trống."; return }
-        let vaccine = store.snapshot.vaccines.first { $0.id == vaccineID } ?? store.snapshot.vaccines.first { $0.name.localizedCaseInsensitiveCompare(trimmed) == .orderedSame } ?? VaccineRecord(name: trimmed)
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard selectedVaccineID != nil || !trimmed.isEmpty else { validation = "Hãy chọn hồ sơ hoặc nhập tên vaccine."; return }
+        let doseNumber = number.trimmingCharacters(in: .whitespaces)
+        guard doseNumber.isEmpty || (Int(doseNumber).map { $0 > 0 } ?? false) else { validation = "Số mũi cần là số dương hoặc để trống."; return }
+        var vaccine = store.snapshot.vaccines.first { $0.id == selectedVaccineID } ?? store.snapshot.vaccines.first { $0.name.localizedCaseInsensitiveCompare(trimmed) == .orderedSame } ?? VaccineRecord(name: trimmed)
+        if !store.snapshot.vaccines.contains(where: { $0.id == vaccine.id }) { vaccine.category = category }
         var dose = existing ?? VaccinationDose(vaccineID: vaccine.id, day: Day.key(day))
-        dose.day = Day.key(day); dose.number = Int(number); dose.product = product; dose.place = place; dose.lot = lot; dose.notes = notes; dose.attachmentIDs = files.map(\.id); dose.appointmentID = appointmentID ?? dose.appointmentID
+        dose.vaccineID = vaccine.id; dose.day = Day.key(day); dose.number = Int(doseNumber); dose.product = product; dose.place = place; dose.lot = lot; dose.notes = notes; dose.attachmentIDs = files.map(\.id); dose.appointmentID = appointmentID ?? dose.appointmentID
+        guard !store.snapshot.vaccinations.contains(where: { $0.id != dose.id && $0.vaccineID == vaccine.id && ((dose.number != nil && $0.number == dose.number) || $0.day == dose.day) }) else { validation = "Hồ sơ đã có cùng số mũi hoặc ngày tiêm. Hãy sửa mũi đã có để tránh ghi trùng."; return }
         if store.commit({ s in
             if !s.vaccines.contains(where: { $0.id == vaccine.id }) { s.vaccines.append(vaccine) }
             s.vaccinations.removeAll { $0.id == dose.id }; s.vaccinations.append(dose)
@@ -151,7 +242,16 @@ struct VaccineImportView: View {
             if processing { ProgressView("Đang đọc…") }
             ForEach($drafts) { $draft in
                 Section("Mũi tiêm cần kiểm tra") {
-                    TextField("Tên vaccine", text: $draft.name)
+                    Picker("Thuộc hồ sơ", selection: $draft.vaccineID) {
+                        Text("Theo tên bên dưới / hồ sơ mới").tag(Optional<UUID>.none)
+                        ForEach(store.snapshot.vaccines) { Text($0.name).tag(Optional($0.id)) }
+                    }.onChange(of: draft.vaccineID) { _, id in
+                        if let vaccine = store.snapshot.vaccines.first(where: { $0.id == id }) { draft.name = vaccine.name }
+                    }
+                    if draft.vaccineID == nil {
+                        TextField("Tên vaccine", text: $draft.name)
+                        Picker("Nhóm nếu tạo hồ sơ mới", selection: $draft.category) { ForEach(VaccineCategory.allCases, id: \.self) { Text($0.title).tag($0) } }
+                    }
                     TextField("Ngày đã tiêm · dd/mm/yyyy", text: $draft.injectedDateText)
                     TextField("Mũi thứ · có thể bỏ trống", text: $draft.number)
                     TextField("Tên sản phẩm", text: $draft.product)
@@ -210,8 +310,8 @@ struct VaccineImportView: View {
                 for file in files where !s.attachments.contains(where: { $0.id == file.id }) { s.attachments.append(file) }
                 for draft in drafts {
                     let name = draft.name.trimmingCharacters(in: .whitespaces)
-                    let vaccine = s.vaccines.first { $0.name.localizedCaseInsensitiveCompare(name) == .orderedSame } ?? VaccineRecord(name: name)
-                    if !s.vaccines.contains(where: { $0.id == vaccine.id }) { s.vaccines.append(vaccine) }
+                    var vaccine = s.vaccines.first { $0.id == draft.vaccineID } ?? s.vaccines.first { $0.name.localizedCaseInsensitiveCompare(name) == .orderedSame } ?? VaccineRecord(name: name)
+                    if !s.vaccines.contains(where: { $0.id == vaccine.id }) { vaccine.category = draft.category; s.vaccines.append(vaccine) }
                     let day = Day.parseVietnamese(draft.injectedDateText)!
                     if mergeDuplicates, let i = s.vaccinations.firstIndex(where: { $0.vaccineID == vaccine.id && $0.day == day }) {
                         s.vaccinations[i].attachmentIDs = Array(Set(s.vaccinations[i].attachmentIDs + files.map(\.id)))
@@ -243,6 +343,10 @@ struct AttachmentLinks: View {
 struct AttachmentPicker: View {
     @Environment(AppStore.self) private var store
     @Binding var files: [Attachment]
+    @Binding var isBusy: Bool
+    init(files: Binding<[Attachment]>, isBusy: Binding<Bool> = .constant(false)) {
+        _files = files; _isBusy = isBusy
+    }
     @State private var photos: [PhotosPickerItem] = []
     @State private var importing = false
     @State private var busy = false
@@ -258,8 +362,9 @@ struct AttachmentPicker: View {
         if let message { Text(message).font(.footnote).foregroundStyle(.red) }
         Color.clear.frame(height: 0)
             .onChange(of: photos) { _, items in
+                guard !items.isEmpty else { return }
                 Task {
-                    busy = true; defer { busy = false; photos = [] }
+                    busy = true; isBusy = true; defer { busy = false; isBusy = false; photos = [] }
                     do {
                         for item in items {
                             guard let data = try await item.loadTransferable(type: Data.self) else { throw ValidationError.message("Không đọc được ảnh.") }

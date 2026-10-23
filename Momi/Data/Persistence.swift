@@ -45,6 +45,7 @@ import MomiCore
         s.meals = try list(MealPlanEntry.self, "meal")
         s.bookmarks = try list([String].self, "bookmarks").first ?? []
         s.savedFoods = try list([String].self, "savedFoods").first ?? []
+        s.ultrasounds = try list(UltrasoundEntry.self, "ultrasound")
         return s
     }
     func save(_ snapshot: Snapshot) throws {
@@ -65,6 +66,7 @@ import MomiCore
         try addList(snapshot.vaccinations, kind: "vaccination"); try addList(snapshot.attachments, kind: "attachment")
         try addList(snapshot.records, kind: "record"); try addList(snapshot.journal, kind: "journal")
         try addList(snapshot.dailyLogs, kind: "dailyLog"); try addList(snapshot.meals, kind: "meal")
+        try addList(snapshot.ultrasounds, kind: "ultrasound")
         try add(snapshot.bookmarks, kind: "bookmarks", id: "main"); try add(snapshot.savedFoods, kind: "savedFoods", id: "main")
         do {
             let rows = try context.fetch(FetchDescriptor<StoredEntity>())

@@ -7,6 +7,8 @@ enum MomiTheme {
     static let green = Color(red: 0.30, green: 0.43, blue: 0.34)
     static let ink = Color(red: 0.165, green: 0.141, blue: 0.125)
     static let muted = Color(red: 0.39, green: 0.34, blue: 0.30)
+    static let pregnancyPink = Color(red: 0.957, green: 0.890, blue: 0.867)
+    static let border = Color(red: 0.918, green: 0.882, blue: 0.827)
     static let rose = Color(red: 0.55, green: 0.29, blue: 0.25)
 }
 struct MomiCard<Content: View>: View {

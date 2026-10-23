@@ -32,15 +32,16 @@ swift run --package-path MomiCore MomiCoreChecks
 
 ## Implemented code
 
-- Four tabs, onboarding, preparation/pregnancy stage, due-date-based age estimate, and stage change history.
-- Checklist CRUD, groups, completion/undo/archive, dates and reminders.
+- Four tabs, onboarding, preparation/pregnancy stage, due-date-based age estimate, and stage change history. Pregnancy Journey follows the supplied design with a pink age/due-date card, horizontal week selector, Mother/Baby stage summaries, next examination appointment, stage-filtered checklist, and nutrition/journal/ultrasound shortcuts.
+- Checklist CRUD, groups, completion/undo/archive, dates and reminders. Home includes undated/overdue/today tasks, plus a separate upcoming preview, derived from the same saved snapshot.
 - Supplements with ingredients, versioned schedules, weekday/time slots, end dates, pause/resume intervals, intake history and snooze.
 - Local notification scheduling, authenticated lock-screen intake actions, privacy-preserving notification text, authorization status and coverage display.
-- Vaccine records and individual doses, appointment links, multi-page native document scan, photo/PDF import, on-device OCR, editable review and optional duplicate merging.
+- Vaccine records grouped by disease category, editable confirmed dose-plan counts, multiple numbered doses per record, and confirmed deletion of one dose or the entire record. Deleting a record cancels its scheduled appointments/reminders while preserving appointment history and shared attachments. Both manual entry and OCR review can select an existing record. Includes appointment links, multi-page native document scan, photo/PDF import, on-device OCR, editable review and optional duplicate merging.
 - Medical appointments, questions, reschedule/cancel/complete and linked health records.
-- Image/PDF attachments, Quick Look, journal, daily symptoms and period-start logs.
+- Image/PDF attachments, Quick Look, journal, daily symptoms and period-start logs. Preparation mode includes a monthly calendar with recorded period days, predicted next period, estimated ovulation/fertile interval, persistent cycle settings, and period entry after onboarding. Accessible from Home, Journey and Settings.
 - Small bundled Vietnamese knowledge/food library with source links, bookmarks, preferences, allergen tags and meal planning.
 - Device authentication lock, encrypted backup/restore, intake CSV export and iOS PDF visit summary.
+- Ultrasound albums tied explicitly to weeks 0–42: photo/PDF import, native document-camera capture, local thumbnails/Quick Look, examination date, notes, edit/move/delete and encrypted backup/restore of original files. Changing the due date never silently reassigns stored photos. The complete album is also available from Mother’s Book, including after changing stages.
 - App icon, Info.plist, privacy manifest and a generated shared Xcode scheme.
 
 ## Architecture
@@ -49,7 +50,7 @@ swift run --package-path MomiCore MomiCoreChecks
 
 `Momi/Features` contains SwiftUI views and local form drafts. `AppStore` serializes mutations on the main actor; it saves first and only then publishes new state. Save failure leaves the previous visible state intact.
 
-`Persistence` stores each domain record as its own SwiftData row (`StoredEntity`: stable key, kind, encoded payload). This deliberate small-app choice keeps the domain portable and allows a complete backup to use the same models. It is not a single JSON file or UserDefaults database. The physical envelope is stable; domain payloads use schema version 1. Before changing persisted domain fields, add compatible decoding/migrations and migration tests; never reset an existing store on decode failure.
+`Persistence` stores each domain record as its own SwiftData row (`StoredEntity`: stable key, kind, encoded payload). This deliberate small-app choice keeps the domain portable and allows a complete backup to use the same models. It is not a single JSON file or UserDefaults database. The physical envelope is stable; domain payloads use schema version 1. New ultrasound records use a separate `ultrasound` row kind; old backups without the `ultrasounds` key decode as an empty album. Added checklist stage/category/cycle fields are optional for legacy records. Before changing persisted domain fields, add compatible decoding/migrations and migration tests; never reset an existing store on decode failure.
 
 Attachments live in Application Support with relative filenames. Metadata is kept in the database. Imported files are staged before the database commit; abandoned files are cleaned at the next launch. No health content is written to diagnostics.
 
@@ -88,16 +89,16 @@ PDF/CSV exports are readable, unencrypted sharing formats and cannot restore the
 
 ### Content and scope
 
-The content library is a small initial set, with source links and no claim of clinical review. It needs Vietnamese clinician review and expansion before being treated as comprehensive pregnancy guidance. Food filters use the sample recipe's main allergens, not a certified allergen database. Cycle features record observations; fertility prediction and HealthKit integration are not implemented. There is no AI diagnosis, prescription generation or automatic supplement dosage recommendation.
+The content library is a small initial set, with source links and no claim of clinical review. It needs Vietnamese clinician review and expansion before being treated as comprehensive pregnancy guidance. Food filters use the sample recipe's main allergens, not a certified allergen database. Cycle predictions are a calendar estimate, anchored to the latest recorded period, using an explicitly displayed default of 28 days until a user sets her cycle length. Estimated ovulation is about 14 days before the next predicted period (NHS); the estimated fertile interval spans five days before through one day after that estimate (ACOG). Defaults for period duration are shown as five days. Predictions do not roll forward through unrecorded periods and stop in pregnancy mode. This does not confirm ovulation or provide contraception guidance. Sources are linked in the cycle screen. HealthKit integration is not implemented. There is no AI diagnosis, prescription generation or automatic supplement dosage recommendation.
 
 ## Validation on the implementation machine
 
 - Verified on 2026-10-23 with Xcode 27.1 (27A9275); first-launch components installed successfully.
 - Full iOS Simulator build succeeded, including SwiftData macros and all iOS-only services. Build log: `/tmp/momi-xcode-build.log`.
 - Full iPhone device build succeeded with signing disabled. This checks compilation/linking; installation still requires selecting a development team. Build log: `/tmp/momi-device-build.log`.
-- `swift test --package-path Momi/MomiCore --scratch-path /tmp/momi-xcode-tests` passed all 15 Swift Testing tests. Test log: `/tmp/momi-core-tests.log`.
+- `swift test --package-path Momi/MomiCore --scratch-path /tmp/momi-xcode-tests` passed all 31 Swift Testing tests, including gestational-week boundaries, weekly ultrasound associations, legacy backup decoding, image backup round trips, shared-file deletion safety, stage filtering, cycle predictions, undated checklist items, legacy record decoding, vaccine deletion/reminder cancellation/shared attachments, and backup round trips with the new optional fields. Test log: `/tmp/momi-core-tests.log`.
 - Fixed AppStore initialization to initialize its notification service before accessing observable state for attachment cleanup.
-- Simulator launch and UI/runtime checks remain pending: no iOS Simulator runtime was installed. An iOS runtime download was started with `xcodebuild -downloadPlatform iOS`; progress is in `/tmp/momi-runtime-download.log`. Once installed, select an iPhone simulator in Xcode and Run.
+- Simulator runtime download was cancelled at the user’s request. The previous app was tested by the user on a physical iPhone. The current pregnancy Journey/ultrasound/calendar/checklist/vaccine changes compile successfully for iPhone; on-device UI verification of these changes is still pending. Reconnect the iPhone, select it in Xcode, and Run (⌘R) with the same bundle identifier/team to update in place. Do not delete the installed app to update.
 - Camera/OCR accuracy, notification delivery, persistence across app launches, and device authentication still require the acceptance checks below. A successful build alone does not establish those behaviors.
 
 ## Device acceptance checks before use
@@ -109,3 +110,17 @@ The content library is a small initial set, with source links and no claim of cl
 5. Export backup, restore into a separate test installation, and compare records plus image/PDF contents. Test wrong password and corrupted files.
 6. Verify Face ID/passcode, app switcher cover, camera permission denial, Dynamic Type, keyboard and VoiceOver on the actual iPhone.
 7. Verify CSV/PDF exports and all dates/times in Asia/Ho_Chi_Minh and after a timezone change.
+8. Skip period entry during onboarding, then add it through Home/Journey/Settings. Change cycle length, navigate calendar months and select a day. Confirm recorded days and estimated days have distinct legends. Switch to pregnancy mode and confirm fertility predictions disappear.
+9. Add undated, today, overdue and future checklist tasks; return Home and check the correct sections. Complete a task on Home and confirm the shared checklist updates.
+10. Assign a legacy vaccine to a category, set its confirmed planned count, and add multiple doses through manual/OCR entry using the existing-record picker. Delete one dose, then test deleting a separate test vaccine with pending reminders and a shared attachment.
+
+## Pregnancy Journey and ultrasound acceptance checks
+
+1. Switch to pregnancy and enter a due date. Check the displayed current age and that the week strip initially centers the corresponding week. Unknown/invalid age must show an explicit unknown state rather than an invented week.
+2. Select week 6, upload images, enter an examination date and notes, and save. Select week 7: week 6 images must not appear there. Return to week 6 and preview the originals.
+3. Edit the due date: the age updates, and saved images remain in their explicitly assigned weeks. Edit a record to move it to another week if necessary.
+4. Test photo-library import, document-camera capture, PDF import, cancellation and permission denial on the iPhone. Saving is disabled while photo-library data is loading.
+5. Force quit/relaunch, then export/restore an encrypted backup and verify each week's notes and original files.
+6. Delete a test entry and check unrelated weeks and shared files remain. Check the album is still accessible from Mother's Book after switching back to preparation.
+7. Confirm checklist items tagged for pregnancy (and shared items) appear in the pregnancy card; items tagged for preparation do not. Completing an item updates the same saved checklist.
+8. Verify the layout at the intended iPhone size and with larger text. Mother/Baby copy is general stage-level guidance, as in the prototype, with NHS source links; it is not an individual scan interpretation or a clinically reviewed week-by-week content library.
