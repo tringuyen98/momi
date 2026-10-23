@@ -60,3 +60,11 @@ fastlane/report.xml
 fastlane/Preview.html
 fastlane/screenshots/**/*.png
 fastlane/test_output
+
+# Project local files
+.DS_Store
+DerivedData/
+*.xcuserstate
+*.momi
+*.mobileprovision
+*.p12
