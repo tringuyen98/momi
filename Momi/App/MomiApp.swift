@@ -24,22 +24,43 @@ struct AppRootView: View {
     @State private var unlocked = false
     @State private var unlocking = false
     @State private var authMessage: String?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var entering = false
+    @State private var homeReady = false
+    @State private var homeSettled = false
+    @State private var entranceCount = 0
+    @State private var welcomeName = ""
     var body: some View {
         @Bindable var store = store
         ZStack {
-            if store.snapshot.profile.onboarded { RootTabView() }
-            else { OnboardingView() }
+            if (store.snapshot.profile.onboarded && !store.previewWelcome && !entering) || (entering && homeReady) {
+                RootTabView()
+                    .scaleEffect(entering && !homeSettled && !reduceMotion ? 0.97 : 1)
+                    .blur(radius: entering && !homeSettled && !reduceMotion ? 5 : 0)
+                    .allowsHitTesting(!entering)
+                    .accessibilityHidden(entering)
+            } else {
+                OnboardingView(isPreview: store.previewWelcome, onClose: { store.previewWelcome = false }, onBegin: begin)
+                    .allowsHitTesting(!entering).accessibilityHidden(entering)
+            }
+            if entering {
+                MomiEntranceOverlay(name: welcomeName, onCovered: { homeReady = true }, onReveal: {
+                    withAnimation(reduceMotion ? .easeOut(duration: 0.2) : .spring(response: 0.65, dampingFraction: 0.9)) { homeSettled = true }
+                }, onFinished: finishEntrance).zIndex(2)
+            }
             if store.snapshot.profile.appLock && (!unlocked || scenePhase != .active) {
                 VStack(spacing: 22) {
                     Image(systemName: "lock.shield").font(.system(size: 48)).foregroundStyle(MomiTheme.green)
                     Text("Sổ riêng của mẹ").font(.title.bold())
                     if let authMessage { Text(authMessage).font(.subheadline).multilineTextAlignment(.center) }
                     Button("Mở khóa Momi") { Task { await unlock() } }.buttonStyle(.borderedProminent).disabled(unlocking)
-                }.padding(30).frame(maxWidth: .infinity, maxHeight: .infinity).background(MomiTheme.background)
+                }.padding(30).frame(maxWidth: .infinity, maxHeight: .infinity).background(MomiTheme.background).zIndex(3)
             }
         }
         .alert("Momi chưa hoàn thành thao tác", isPresented: Binding(get: { store.error != nil }, set: { if !$0 { store.error = nil } })) { Button("Đóng") { store.error = nil } } message: { Text(store.error ?? "") }
+        .sensoryFeedback(.success, trigger: entranceCount)
         .onChange(of: scenePhase) { _, phase in
+            if phase == .background && entering { finishEntrance() }
             if phase == .background { unlocked = false }
             if phase == .active { store.refresh(); if store.snapshot.profile.appLock && !unlocked { Task { await unlock() } } }
         }
@@ -47,6 +68,30 @@ struct AppRootView: View {
         .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { now in
             if scenePhase == .active && store.today != Day.key(now) { store.refresh() }
         }
+    }
+    private func begin(_ draft: OnboardingDraft) -> Bool {
+        guard !entering else { return false }
+        if !store.previewWelcome {
+            guard store.commit({ s in
+                s.profile.name = draft.name.trimmingCharacters(in: .whitespacesAndNewlines)
+                s.profile.stage = draft.stage; s.profile.onboarded = true
+                s.profile.dueDate = draft.stage == .pregnant && draft.hasDueDate ? Day.key(draft.dueDate) : nil
+                if draft.stage == .preparation && draft.hasPeriodDate {
+                    let day = Day.key(min(draft.periodDate, Date()))
+                    var log = s.dailyLogs.first { $0.day == day } ?? DailyHealthLog(day: day)
+                    log.bleeding = true; log.periodStart = true
+                    s.dailyLogs.removeAll { $0.day == day }; s.dailyLogs.append(log)
+                }
+            }) else { return false }
+        }
+        welcomeName = draft.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        store.selectedTab = 0
+        homeReady = false; homeSettled = false; entering = true; entranceCount += 1
+        return true
+    }
+    private func finishEntrance() {
+        store.previewWelcome = false
+        entering = false; homeReady = false; homeSettled = true
     }
     private func unlock() async {
         guard !unlocking else { return }

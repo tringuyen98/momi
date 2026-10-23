@@ -7,6 +7,7 @@ import MomiCore
     var error: String?
     var notice: String?
     var selectedTab = 0
+    var previewWelcome = false
     var route: Route?
     var today = Day.key(Date())
     let persistence: Persistence

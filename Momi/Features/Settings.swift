@@ -41,6 +41,7 @@ struct SettingsView: View {
                 NavigationLink("Giai đoạn: " + store.snapshot.profile.stage.title) { StageEditor() }
                 if store.snapshot.profile.stage == .preparation { NavigationLink("Kỳ kinh & thiết lập chu kỳ") { CycleView() } }
                 Text("Dữ liệu lưu trên thiết bị, không có tài khoản hoặc máy chủ Momi.").font(.footnote)
+                Button("Xem lại màn chào Momi", systemImage: "sparkles") { store.previewWelcome = true }
             }
             Section("Thông báo") {
                 Text(store.notifications.permission)

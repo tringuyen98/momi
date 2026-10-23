@@ -1,42 +1,6 @@
 import SwiftUI
 import MomiCore
 
-struct OnboardingView: View {
-    @Environment(AppStore.self) private var store
-    @State private var name = ""
-    @State private var stage: Stage = .preparation
-    @State private var hasDate = false
-    @State private var date = Date()
-    var body: some View {
-        NavigationStack {
-            MomiPage {
-                Image(systemName: "leaf.circle.fill").font(.system(size: 70)).foregroundStyle(MomiTheme.green).padding(.top, 32).accessibilityHidden(true)
-                Text("Chào bạn, cùng chuẩn bị từng chút một").font(.largeTitle.bold())
-                Text("Momi giúp bạn nhớ việc cần làm, lịch hẹn và vitamin — để bạn bớt phải ghi nhớ.").foregroundStyle(MomiTheme.muted)
-                MomiCard {
-                    Text("Bạn muốn Momi gọi mình là gì?").font(.headline)
-                    TextField("Tên của bạn", text: $name).textFieldStyle(.roundedBorder)
-                    Picker("Giai đoạn", selection: $stage) { ForEach(Stage.allCases, id: \.self) { Text($0.title).tag($0) } }
-                    Toggle(stage == .pregnant ? "Đã biết ngày dự sinh" : "Ghi ngày bắt đầu kỳ kinh gần nhất", isOn: $hasDate)
-                    if hasDate {
-                        if stage == .pregnant { DatePicker("Ngày dự sinh", selection: $date, displayedComponents: .date) }
-                        else { DatePicker("Ngày bắt đầu kỳ kinh", selection: $date, in: ...Date(), displayedComponents: .date) }
-                    }
-                }
-                Label("Không cần tài khoản. Thông tin chưa biết có thể thêm sau.", systemImage: "lock").font(.footnote).foregroundStyle(MomiTheme.muted)
-                PrimaryButton(title: "Bắt đầu cùng Momi") {
-                    _ = store.commit { s in
-                        s.profile.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
-                        s.profile.stage = stage; s.profile.onboarded = true
-                        if hasDate && stage == .pregnant { s.profile.dueDate = Day.key(date) }
-                        if hasDate && stage == .preparation { var log = DailyHealthLog(day: Day.key(min(date, Date()))); log.bleeding = true; log.periodStart = true; s.dailyLogs.append(log) }
-                    }
-                }
-            }
-        }
-    }
-}
-
 struct TodayView: View {
     @Environment(AppStore.self) private var store
     @State private var quickLog = false

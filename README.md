@@ -32,7 +32,7 @@ swift run --package-path MomiCore MomiCoreChecks
 
 ## Implemented code
 
-- Four tabs, onboarding, preparation/pregnancy stage, due-date-based age estimate, and stage change history. Pregnancy Journey follows the supplied design with a pink age/due-date card, horizontal week selector, Mother/Baby stage summaries, next examination appointment, stage-filtered checklist, and nutrition/journal/ultrasound shortcuts.
+- Four tabs, redesigned onboarding with a soft botanical mark, stage cards, optional dates, fixed bottom start button and an animated welcome-to-home transition; preparation/pregnancy stage, due-date-based age estimate, and stage change history. Pregnancy Journey follows the supplied design with a pink age/due-date card, horizontal week selector, Mother/Baby stage summaries, next examination appointment, stage-filtered checklist, and nutrition/journal/ultrasound shortcuts.
 - Checklist CRUD, groups, completion/undo/archive, dates and reminders. Home includes undated/overdue/today tasks, plus a separate upcoming preview, derived from the same saved snapshot.
 - Supplements with ingredients, versioned schedules, weekday/time slots, end dates, pause/resume intervals, intake history and snooze.
 - Local notification scheduling, authenticated lock-screen intake actions, privacy-preserving notification text, authorization status and coverage display.
@@ -124,3 +124,13 @@ The content library is a small initial set, with source links and no claim of cl
 6. Delete a test entry and check unrelated weeks and shared files remain. Check the album is still accessible from Mother's Book after switching back to preparation.
 7. Confirm checklist items tagged for pregnancy (and shared items) appear in the pregnancy card; items tagged for preparation do not. Completing an item updates the same saved checklist.
 8. Verify the layout at the intended iPhone size and with larger text. Mother/Baby copy is general stage-level guidance, as in the prototype, with NHS source links; it is not an individual scan interpretation or a clinically reviewed week-by-week content library.
+
+## Welcome screen and entrance animation
+
+The welcome screen is implemented in native SwiftUI with vector shapes/SF Symbols, a soft ivory/sage background, serif heading, gently moving botanical emblem and tactile stage cards. The welcome screen does not scroll: it selects a spacious, compact or minimal layout to fit the available height, keeping the start button fixed at the bottom. The name is entered directly on the welcome screen; the hero collapses while typing so the keyboard and start button remain reachable. Optional dates open in a separate editing sheet; canceling it leaves the date unchanged. Stage cards share equal widths and the height of the taller label. Smaller layouts omit decoration, and accessibility text uses a stage menu instead of two cards. Period-start and due-date drafts are independent when switching stages.
+
+After a successful save, a soft circular reveal grows from near the start button, shows a short personalized greeting, then fades into Home while Home settles into place. The normal sequence is about two seconds. Reduce Motion uses a short static greeting and fade, without scaling, floating or blur. Saving failure leaves the editable welcome screen in place; repeated taps are blocked. Backgrounding during the transition finishes the entrance, so returning to the app cannot leave a blocking overlay.
+
+Existing users can choose **Cài đặt → Xem lại màn chào Momi** to preview both the layout and transition without changing their saved profile or records. No deletion/reinstallation is needed. The preview's Close button exits without starting the animation.
+
+The iPhone build succeeds. No simulator runtime is installed, so visual/timing verification on-device remains pending. Check the new screen on the intended iPhone, with the keyboard, both stage/date options, large accessibility text and Reduce Motion. Also test rapid repeated Start taps and background/foreground during the entrance.

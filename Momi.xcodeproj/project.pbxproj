@@ -29,6 +29,7 @@
 		FCAB9C452490DF2BF98917BE /* Momi/Features/Appointments.swift in Sources */ = {isa = PBXBuildFile; fileRef = C66916A13934FB0CFA460734 /* Momi/Features/Appointments.swift */; };
 		A81B22B7E782AB365C8302C9 /* Momi/Features/PregnancyJourney.swift in Sources */ = {isa = PBXBuildFile; fileRef = 288FE577AAB36CFD6020F102; };
 		8EA5DECBD1D50A21060FBEE4 /* Momi/Features/Ultrasounds.swift in Sources */ = {isa = PBXBuildFile; fileRef = 240D4D8996FFB80E832F8BC0; };
+		1373F6D0D7062C35253B17BC /* Momi/Features/Onboarding.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D706B0E4FF1B86DD4A8EDD4; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -55,6 +56,7 @@
 		FC4183A304DF214657B58396 /* Momi/Features/Vaccines.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Momi/Features/Vaccines.swift; sourceTree = "<group>"; };
 		288FE577AAB36CFD6020F102 /* Momi/Features/PregnancyJourney.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Momi/Features/PregnancyJourney.swift; sourceTree = "<group>"; };
 		240D4D8996FFB80E832F8BC0 /* Momi/Features/Ultrasounds.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Momi/Features/Ultrasounds.swift; sourceTree = "<group>"; };
+		9D706B0E4FF1B86DD4A8EDD4 /* Momi/Features/Onboarding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Momi/Features/Onboarding.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -72,6 +74,7 @@
 		B28B7AF69320201D1CF206EB = {
 			isa = PBXGroup;
 			children = (
+				9D706B0E4FF1B86DD4A8EDD4 /* Momi/Features/Onboarding.swift */,
 				240D4D8996FFB80E832F8BC0 /* Momi/Features/Ultrasounds.swift */,
 				288FE577AAB36CFD6020F102 /* Momi/Features/PregnancyJourney.swift */,
 				3013BA0B23BDE052CFE8723B /* Momi/App/AppStore.swift */,
@@ -182,6 +185,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				1373F6D0D7062C35253B17BC /* Momi/Features/Onboarding.swift in Sources */,
 				8EA5DECBD1D50A21060FBEE4 /* Momi/Features/Ultrasounds.swift in Sources */,
 				A81B22B7E782AB365C8302C9 /* Momi/Features/PregnancyJourney.swift in Sources */,
 				E71C53525D614576EDFAF8CF /* Momi/App/AppStore.swift in Sources */,
